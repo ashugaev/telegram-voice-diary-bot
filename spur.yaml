@@ -4,6 +4,13 @@ projects:
     path: .
     defaultBranch: main
     sessionPrefix: diary-bot
+    symlinks:
+      - .env
+    sidecars:
+      dev:
+        command: 'bash -c "ssh root@146.190.110.77 systemctl stop noter 2>/dev/null || true; exec bash scripts/bot-watch.sh"'
+        autoStart: false
+        idleTtlMinutes: 999999
     sources:
       gh:
         type: github
