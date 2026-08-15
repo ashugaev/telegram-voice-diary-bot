@@ -787,9 +787,16 @@ async def _update_profile_points(diary_text: str, reply_target=None) -> None:
         return
     # Outside the lock: a Telegram send must never hold memory.
     try:
-        await _send_memory_note(
+        note, sent = await _send_memory_note(
             reply_target, (PROFILE_BLOCK_LABEL, _memory_diff_lines(existing, points))
         )
+        if sent:
+            chain = [
+                {"role": "user", "content": diary_text},
+                {"role": "assistant", "content": note},
+            ]
+            for message in sent:
+                _store_roast_chain(_message_chat_id(message), message.message_id, chain)
     except Exception:
         logger.exception("Failed to post the profile update note")
 
@@ -816,16 +823,17 @@ def _render_memory_note(*blocks: tuple[str, list[str]]) -> str | None:
     return "\n".join([MEMORY_NOTE_HEADER, *parts])
 
 
-async def _send_memory_note(reply_target, *blocks: tuple[str, list[str]]) -> list:
+async def _send_memory_note(reply_target, *blocks: tuple[str, list[str]]) -> tuple[str | None, list]:
     """Post the note, if there is one. A dense extraction can outgrow one
-    Telegram message, so it is chunked like a roast. Returns what was sent."""
+    Telegram message, so it is chunked like a roast. Returns the complete note
+    and the messages that carried it."""
     text = _render_memory_note(*blocks)
     if not text:
-        return []
+        return None, []
     sent = []
     for chunk in _split_message(text):
         sent.append(await _reply_to_source(sent[-1] if sent else reply_target, chunk))
-    return sent
+    return text, sent
 
 
 async def _persist_rules_ops(
@@ -844,7 +852,7 @@ async def _persist_rules_ops(
     if after == before:
         return
     state_store.set_rules(after)
-    notes = await _send_memory_note(
+    _, notes = await _send_memory_note(
         reply_target, (RULES_BLOCK_LABEL, _memory_diff_lines(before, after))
     )
     # Map the note to the chain too, so replying to it keeps the conversation.

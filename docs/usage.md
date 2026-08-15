@@ -71,7 +71,7 @@ A fact is only ever removed when it stopped being true or when it folds into a d
 
 Under the hood each fact carries an id, and the model answers with operations against those ids (`create`, `modify`, `delete`) — never the profile itself. So the request cost stays flat however large the profile grows, a fact the model does not mention cannot be dropped, and an operation aimed at an unknown id is skipped instead of hitting the wrong fact. An unusable response leaves the accumulated profile intact. Facts persist in local state and are fed back as background context on the next roast. Editing the Notion page by hand works too: a bullet whose text you left alone keeps its id, a reworded one becomes a new fact. Pick the model with `OPENAI_PROFILE_MODEL` (defaults to `OPENAI_SUMMARY_MODEL`).
 
-What an entry taught is reported the same way as a rule change: a `🧠 Memory updated` note under the preview, with an `About you:` block listing the facts gained (`+`) and lost (`−`). A reworded fact shows as both. An entry that taught nothing sends nothing.
+What an entry taught is reported the same way as a rule change: a `🧠 Memory updated` note under the preview, with an `About you:` block listing the facts gained (`+`) and lost (`−`). A reworded fact shows as both. Reply to the note to discuss it — it continues as a normal roast thread. An entry that taught nothing sends nothing.
 
 The profile also lives on a **`Memory — Author profile`** page sitting next to your diary database, so you can read what the bot knows in the same place as your notes — and correct it: edit the bullets and the bot adopts your version, same as with the rules page — see [Configuration](configuration.md#memory-pages).
 

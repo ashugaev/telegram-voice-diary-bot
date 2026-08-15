@@ -1559,10 +1559,64 @@ class RoastFlowTests(unittest.IsolatedAsyncioTestCase):
             "🧠 Memory updated\nAbout you:\n+ играет в пинг-понг",
         )
 
+    async def test_profile_note_starts_a_replyable_conversation(self):
+        fake_bot = await self._extract_with_note(
+            _items("любит кофе"), _items("любит кофе", "играет в пинг-понг")
+        )
+
+        self.assertEqual(bot._roast_chains["123:1001"], [
+            {"role": "user", "content": "today's entry"},
+            {"role": "assistant", "content": "🧠 Memory updated\nAbout you:\n+ играет в пинг-понг"},
+        ])
+
+    async def test_reply_to_profile_note_continues_its_conversation(self):
+        fake_bot = await self._extract_with_note(
+            _items("любит кофе"), _items("любит кофе", "играет в пинг-понг")
+        )
+        user_msg = SimpleNamespace(
+            text="that needs an edit",
+            reply_to_message=SimpleNamespace(message_id=1001),
+            chat_id=123,
+            message_id=30,
+            get_bot=lambda: fake_bot,
+        )
+        update = SimpleNamespace(effective_message=user_msg, effective_chat=SimpleNamespace(id=123))
+        context = SimpleNamespace(bot=fake_bot, user_data={})
+        captured = []
+
+        async def fake_roast(messages, points=None, rules=None):
+            captured.append([dict(message) for message in messages])
+            return _roast_reply("updated")
+
+        with patch.object(bot.roast, "roast", new=fake_roast), \
+                patch.object(bot.state_store, "get_profile_points", return_value=[]), \
+                patch.object(bot.state_store, "get_rules", return_value=[]), \
+                patch.object(bot, "_sync_memory", new=AsyncMock()) as sync_memory:
+            await bot.receive_edit_reply(update, context)
+
+        sync_memory.assert_awaited_once()
+        self.assertEqual(captured, [[
+            {"role": "user", "content": "today's entry"},
+            {"role": "assistant", "content": "🧠 Memory updated\nAbout you:\n+ играет в пинг-понг"},
+            {"role": "user", "content": "that needs an edit"},
+        ]])
+
+    async def test_long_profile_note_maps_every_chunk_to_its_full_context(self):
+        long_fact = "x" * (bot.TELEGRAM_MESSAGE_LIMIT + 100)
+        fake_bot = await self._extract_with_note([], _items(long_fact))
+
+        expected = [
+            {"role": "user", "content": "today's entry"},
+            {"role": "assistant", "content": f"🧠 Memory updated\nAbout you:\n+ {long_fact}"},
+        ]
+        self.assertEqual(bot._roast_chains["123:1001"], expected)
+        self.assertEqual(bot._roast_chains["123:1002"], expected)
+
     async def test_an_entry_that_taught_nothing_sends_nothing(self):
         fake_bot = await self._extract_with_note(_items("любит кофе"), _items("любит кофе"))
 
         self.assertEqual(fake_bot.sent, [])
+        self.assertEqual(bot._roast_chains, {})
 
     async def test_update_profile_points_swallows_failures(self):
         with patch.object(bot.state_store, "get_profile_points", return_value=[]), \
@@ -1604,9 +1658,11 @@ class RoastFlowTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(bot.roast, "roast", new=fake_roast), \
                 patch.object(bot.state_store, "get_profile_points", return_value=[]), \
                 patch.object(bot.state_store, "get_rules", return_value=[]), \
+                patch.object(bot, "_sync_memory", new=AsyncMock()) as sync_memory, \
                 patch.object(bot, "handle_text", new=AsyncMock()) as fake_handle_text:
             await bot.receive_edit_reply(update, context)
 
+        sync_memory.assert_awaited_once()
         fake_handle_text.assert_not_awaited()
         self.assertEqual(captured, [[
             {"role": "user", "content": "original entry"},
@@ -1634,9 +1690,11 @@ class RoastFlowTests(unittest.IsolatedAsyncioTestCase):
                 patch.object(bot.roast, "roast", new=AsyncMock(return_value=_roast_reply(long_answer))), \
                 patch.object(bot.state_store, "get_profile_points", return_value=[]), \
                 patch.object(bot.state_store, "get_rules", return_value=[]), \
+                patch.object(bot, "_sync_memory", new=AsyncMock()) as sync_memory, \
                 patch.object(bot, "_update_profile_points", new=AsyncMock()):
             await bot._roast_draft(query, context, draft)
 
+        sync_memory.assert_awaited_once()
         # Answer split into 2 chunks: status edit (id 1001) + one new reply (id 1002).
         self.assertEqual(len(fake_bot.edits), 1)
         self.assertEqual(len(fake_bot.sent), 2)  # status reply + second chunk
@@ -1699,12 +1757,14 @@ class RoastFlowTests(unittest.IsolatedAsyncioTestCase):
                 patch.object(bot.roast, "roast", new=fake_roast), \
                 patch.object(bot.state_store, "get_profile_points", return_value=[]), \
                 patch.object(bot.state_store, "get_rules", return_value=[]), \
+                patch.object(bot, "_sync_memory", new=AsyncMock()) as sync_memory, \
                 patch.object(bot.state_store, "record_voice") as record_voice:
             await bot.handle_voice(update, context)
 
         # Voice reply never enters the diary flow.
         record_voice.assert_not_called()
         fake_transcribe.assert_awaited_once_with(context, "voice-file-1")
+        sync_memory.assert_awaited_once()
         self.assertEqual(captured, [[
             {"role": "user", "content": "original entry"},
             {"role": "assistant", "content": "first roast"},
