@@ -428,7 +428,7 @@ class CreatePreviewTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(fake_state_store.saved_drafts[0]["formatted_text"], "Formatted")
         self.assertEqual(fake_state_store.saved_drafts[0]["preview_page"], 0)
 
-    async def test_create_preview_hides_format_when_formatted_text_matches_raw_text(self):
+    async def test_create_preview_shows_format_when_formatted_text_matches_raw_text(self):
         fake_state_store = FakeStateStore()
         fake_context = SimpleNamespace(
             bot=FakeEditBot(),
@@ -459,7 +459,7 @@ class CreatePreviewTests(unittest.IsolatedAsyncioTestCase):
             for row in keyboard.inline_keyboard
             for button in row
         ]
-        self.assertNotIn("format:entry-raw", callback_data)
+        self.assertIn("format:entry-raw", callback_data)
 
     async def test_create_preview_schedules_profile_refresh(self):
         fake_state_store = FakeStateStore()
@@ -675,6 +675,28 @@ class FormatDraftFlowTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn("unformat:entry-1", callback_data)
         self.assertNotIn("format:entry-1", callback_data)
+
+    async def test_unformatted_draft_keyboard_hides_format_without_formatted_text(self):
+        draft = {
+            "id": "entry-1",
+            "title": "Title",
+            "text": "raw transcription",
+            "raw_text": "raw transcription",
+            "formatted_text": "",
+            "formatted": False,
+            "tags": ["work"],
+            "entry_date": bot._default_entry_date(),
+        }
+
+        keyboard = bot._preview_keyboard_for_draft(draft)
+        callback_data = [
+            button.callback_data
+            for row in keyboard.inline_keyboard
+            for button in row
+        ]
+
+        self.assertNotIn("format:entry-1", callback_data)
+        self.assertNotIn("unformat:entry-1", callback_data)
 
     async def test_format_then_unformat_round_trip_toggles_buttons(self):
         fake_state_store = FakeStateStore()
