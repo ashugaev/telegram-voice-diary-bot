@@ -587,17 +587,17 @@ def _render_preview_for_draft(draft: dict) -> PreviewRender:
     )
 
 
+def _can_show_format(formatted_text: str | None, formatted: bool = False) -> bool:
+    return bool(formatted_text) and not formatted
+
+
 def _preview_keyboard_for_draft(draft: dict, preview: PreviewRender | None = None) -> InlineKeyboardMarkup:
     preview = preview or _render_preview_for_draft(draft)
     return _preview_keyboard(
         draft["id"],
         highlighted=_draft_highlighted(draft),
         entry_date=draft.get("entry_date"),
-        show_format=(
-            bool(draft.get("formatted_text"))
-            and not draft.get("formatted")
-            and draft.get("formatted_text") != draft.get("text")
-        ),
+        show_format=_can_show_format(draft.get("formatted_text"), bool(draft.get("formatted"))),
         show_original=bool(draft.get("formatted")),
         show_pagination=preview.truncated,
         preview_page=preview.page,
@@ -1242,7 +1242,7 @@ async def _create_preview(
         entry_id,
         highlighted=False,
         entry_date=entry_date,
-        show_format=bool(formatted_text) and formatted_text != text,
+        show_format=_can_show_format(formatted_text),
         show_pagination=preview.truncated,
         preview_page=preview.page,
         page_count=preview.page_count,
