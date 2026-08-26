@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pizdabol — voice notes to a Notion diary, with a coach attached</title>
+<meta name="description" content="Send a voice note to Telegram. Pizdabol transcribes it, titles it, tags it, saves one row in your Notion journal — then tells you what you keep avoiding.">
+<link rel="canonical" href="https://pizdabol.app/">
+<meta name="robots" content="index, follow">
+<meta name="theme-color" content="#14101f">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Pizdabol">
+<meta property="og:url" content="https://pizdabol.app/">
+<meta property="og:title" content="Pizdabol — voice notes to a Notion diary, with a coach attached">
+<meta property="og:description" content="Talk into Telegram. It files the entry in Notion, then tells you what you keep avoiding.">
+<meta property="og:image" content="https://pizdabol.app/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Pizdabol — voice notes to a Notion diary, with a coach attached">
+<meta name="twitter:description" content="Talk into Telegram. It files the entry in Notion, then tells you what you keep avoiding.">
+<meta name="twitter:image" content="https://pizdabol.app/og.png">
+
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Instrument+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/styles.css">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Pizdabol",
+  "applicationCategory": "LifestyleApplication",
+  "operatingSystem": "Telegram",
+  "url": "https://pizdabol.app/",
+  "description": "Telegram bot that turns voice notes into structured Notion diary entries and coaches you on what it reads.",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "isAccessibleForFree": true,
+  "license": "https://github.com/ashugaev/pizdabol-ai/blob/main/LICENSE",
+  "codeRepository": "https://github.com/ashugaev/pizdabol-ai"
+}
+</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="bar">
+  <a class="wordmark" href="/">pizdabol<span class="dot">.</span></a>
+  <nav aria-label="Primary">
+    <a href="#thread">The thread</a>
+    <a href="#flow">How it works</a>
+    <a href="https://github.com/ashugaev/pizdabol-ai">Source</a>
+  </nav>
+  <a class="btn btn-sm" href="https://t.me/pizdabol_ai_bot">Open in Telegram</a>
+</header>
+
+<main id="main">
+
+  <section class="hero">
+    <div class="hero-copy">
+      <p class="eyebrow">voice note &rarr; notion row &rarr; honest reply</p>
+      <h1>Say it out loud. <br>It files the entry, <br>then it <em>argues</em> with you.</h1>
+      <p class="lede">Pizdabol listens to your rambling voice notes, writes them into your Notion journal as clean, titled, tagged entries — and then says the thing your diary never says back.</p>
+      <div class="cta-row">
+        <a class="btn" href="https://t.me/pizdabol_ai_bot">Open in Telegram</a>
+        <a class="btn btn-ghost" href="https://github.com/ashugaev/pizdabol-ai">Run your own copy</a>
+      </div>
+      <p class="fineprint">Your keys, your Notion database, your server. Nothing sits in the middle.</p>
+    </div>
+
+    <div class="hero-thread" id="thread">
+      <div class="thread" role="img" aria-label="Chat transcript: a 47-second voice note is transcribed into a Notion diary entry titled Ninth attempt at a morning, the bot replies with a blunt observation, the author asks it to stay blunt, and the entry is saved.">
+        <p class="thread-day">Tuesday, 23:41</p>
+
+        <article class="msg msg-out" style="--i:0">
+          <div class="voice">
+            <span class="play" aria-hidden="true"></span>
+            <svg class="wave" viewBox="0 0 220 32" aria-hidden="true" preserveAspectRatio="none">
+              <g fill="currentColor">
+                <rect x="0"   y="12" width="3" height="8"  rx="1.5"/><rect x="7"   y="8"  width="3" height="16" rx="1.5"/>
+                <rect x="14"  y="4"  width="3" height="24" rx="1.5"/><rect x="21"  y="10" width="3" height="12" rx="1.5"/>
+                <rect x="28"  y="2"  width="3" height="28" rx="1.5"/><rect x="35"  y="9"  width="3" height="14" rx="1.5"/>
+                <rect x="42"  y="6"  width="3" height="20" rx="1.5"/><rect x="49"  y="13" width="3" height="6"  rx="1.5"/>
+                <rect x="56"  y="5"  width="3" height="22" rx="1.5"/><rect x="63"  y="11" width="3" height="10" rx="1.5"/>
+                <rect x="70"  y="3"  width="3" height="26" rx="1.5"/><rect x="77"  y="9"  width="3" height="14" rx="1.5"/>
+                <rect x="84"  y="7"  width="3" height="18" rx="1.5"/><rect x="91"  y="12" width="3" height="8"  rx="1.5"/>
+                <rect x="98"  y="4"  width="3" height="24" rx="1.5"/><rect x="105" y="10" width="3" height="12" rx="1.5"/>
+                <rect x="112" y="6"  width="3" height="20" rx="1.5"/><rect x="119" y="14" width="3" height="4"  rx="1.5"/>
+                <rect x="126" y="8"  width="3" height="16" rx="1.5"/><rect x="133" y="3"  width="3" height="26" rx="1.5"/>
+                <rect x="140" y="11" width="3" height="10" rx="1.5"/><rect x="147" y="6"  width="3" height="20" rx="1.5"/>
+                <rect x="154" y="13" width="3" height="6"  rx="1.5"/><rect x="161" y="9"  width="3" height="14" rx="1.5"/>
+                <rect x="168" y="5"  width="3" height="22" rx="1.5"/><rect x="175" y="12" width="3" height="8"  rx="1.5"/>
+                <rect x="182" y="7"  width="3" height="18" rx="1.5"/><rect x="189" y="14" width="3" height="4"  rx="1.5"/>
+                <rect x="196" y="10" width="3" height="12" rx="1.5"/><rect x="203" y="13" width="3" height="6"  rx="1.5"/>
+              </g>
+            </svg>
+            <span class="dur">0:47</span>
+          </div>
+        </article>
+
+        <article class="msg msg-in card" style="--i:1">
+          <p class="card-kicker">Draft entry</p>
+          <h2 class="card-title">Ninth attempt at a morning</h2>
+          <p class="card-body">Said nine again, started at noon again. Spent the evening being productive about things nobody asked for, and now it's midnight and I'm annoyed at myself in the exact same words as Sunday.</p>
+          <p class="tags"><span>#routine</span><span>#work</span><span>#self</span></p>
+          <p class="btns" aria-hidden="true"><span>Format</span><span>Title</span><span>Tags</span><span>Date</span><span class="save">Save</span></p>
+        </article>
+
+        <article class="msg msg-in roast" style="--i:2">
+          <p class="roast-kicker">🔥 Roast</p>
+          <p>You don't have a morning problem, you have a 1 a.m. problem. Third note this month with the same sentence in it. Want me to start counting out loud?</p>
+        </article>
+
+        <article class="msg msg-out text" style="--i:3">
+          <p>counting is fine. just don't be nice about it</p>
+        </article>
+
+        <article class="msg msg-in roast" style="--i:4">
+          <p class="roast-kicker">Rule saved</p>
+          <p>Noted: no cushioning. Day one of nine-a.m. starts is tomorrow, and I'll ask.</p>
+        </article>
+
+        <p class="receipt" style="--i:5"><span class="tick" aria-hidden="true">✓</span> Saved to Notion — Diary / 26 Aug 2026</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="flow" id="flow">
+    <h2 class="section-title">A note becomes an entry in four moves</h2>
+    <ol class="steps">
+      <li>
+        <span class="step-n">01</span>
+        <h3>You talk</h3>
+        <p>Voice or text, any length, no format to follow. Send it the way you'd send it to a friend at midnight.</p>
+      </li>
+      <li>
+        <span class="step-n">02</span>
+        <h3>It writes</h3>
+        <p>Transcribed, cleaned into readable prose, given a title, tags, and today's date. The original wording stays available.</p>
+      </li>
+      <li>
+        <span class="step-n">03</span>
+        <h3>You edit</h3>
+        <p>Change the title, retag, move the date, reformat the text. Nothing reaches Notion until you press Save.</p>
+      </li>
+      <li>
+        <span class="step-n">04</span>
+        <h3>It files</h3>
+        <p>One row in your journal database. No duplicates, no orphan pages, no scattered inbox to clean up later.</p>
+      </li>
+    </ol>
+  </section>
+
+  <section class="learns">
+    <h2 class="section-title">It keeps notes on you</h2>
+    <dl class="spec">
+      <div>
+        <dt>Roast</dt>
+        <dd>An honest read on the entry you just sent. Reply to it and the conversation keeps going — deeper, with the rest of your diary in the room.</dd>
+      </div>
+      <div>
+        <dt>Profile</dt>
+        <dd>A private knowledge base about you, built from your own notes without you filling in a single form. It posts a short line whenever it learns something new.</dd>
+      </div>
+      <div>
+        <dt>Rules</dt>
+        <dd>Tell it to stop moralising, to answer in one line, to never mention your ex. It remembers, and the rules live on a Notion page you can edit by hand.</dd>
+      </div>
+      <div>
+        <dt>Recaps</dt>
+        <dd>A daily summary lands on its own. Ask for the weekly report whenever you want the longer view.</dd>
+      </div>
+    </dl>
+  </section>
+
+  <section class="cmds">
+    <h2 class="section-title">Commands</h2>
+    <ul class="cmd-list">
+      <li><code>/weekly</code><span>Weekly highlight report, now</span></li>
+      <li><code>/stat</code><span>Minutes you've talked, by day and month</span></li>
+      <li><code>/memory</code><span>Rebuild the profile from every saved note</span></li>
+      <li><code>/rules</code><span>Show what it learned about how to talk to you</span></li>
+      <li><code>/help</code><span>Commands and preview buttons</span></li>
+    </ul>
+  </section>
+
+  <section class="own">
+    <h2 class="section-title">Run it yourself</h2>
+    <p class="own-copy">Open source Python. Your Telegram token, your OpenAI key, your Notion database, on a box you control. Clone it, fill in <code>.env</code>, start the process — that's the whole install.</p>
+    <div class="cta-row">
+      <a class="btn" href="https://t.me/pizdabol_ai_bot">Open in Telegram</a>
+      <a class="btn btn-ghost" href="https://github.com/ashugaev/pizdabol-ai">Read the source</a>
+    </div>
+  </section>
+
+</main>
+
+<footer class="foot">
+  <p class="wordmark">pizdabol<span class="dot">.</span></p>
+  <p>A diary that talks back. Built for the Notion Journal.</p>
+  <p><a href="https://github.com/ashugaev/pizdabol-ai">GitHub</a> · <a href="https://t.me/pizdabol_ai_bot">Telegram</a></p>
+</footer>
+</body>
+</html>
