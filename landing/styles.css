@@ -432,7 +432,7 @@ section { max-width: 1320px; margin: 0 auto; }
 
 .cmd-list { list-style: none; margin: 0; padding: 0; max-width: 720px; }
 .cmd-list li {
-  display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 18px;
+  display: grid; grid-template-columns: 104px minmax(0, 1fr); align-items: baseline; gap: 8px 18px;
   padding: 12px 0; border-bottom: 1px dashed var(--line);
 }
 .cmd-list code {
@@ -442,6 +442,20 @@ section { max-width: 1320px; margin: 0 auto; }
 .cmd-list span { color: var(--muted); font-size: 15px; }
 
 .own-copy { max-width: 60ch; color: var(--muted); margin: 0 0 28px; }
+.need-title {
+  font-family: var(--mono); font-size: 12px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--ochre); margin: 0 0 12px;
+}
+.need {
+  list-style: none; margin: 0 0 30px; padding: 0;
+  display: grid; gap: 8px; max-width: 60ch;
+}
+.need li { position: relative; padding-left: 22px; color: var(--muted); font-size: 15px; }
+.need li::before {
+  content: ""; position: absolute; left: 2px; top: 0.62em;
+  width: 8px; height: 1px; background: var(--ochre);
+}
+
 .own-copy code {
   font-family: var(--mono); font-size: 13.5px; color: var(--cream);
   background: var(--ink-3); padding: 2px 6px; border-radius: 5px;
@@ -478,6 +492,10 @@ section { max-width: 1320px; margin: 0 auto; }
 
 @media (max-width: 980px) {
   .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 560px) {
+  .cmd-list li { grid-template-columns: minmax(0, 1fr); gap: 2px; }
 }
 
 @media (max-width: 720px) {

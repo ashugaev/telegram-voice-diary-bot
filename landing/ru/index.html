@@ -47,10 +47,20 @@
   "url": "https://pizdabol.app/ru/",
   "inLanguage": "ru",
   "description": "Telegram-бот, который превращает голосовые заметки в записи дневника в Notion и честно комментирует прочитанное.",
-  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD",
+    "availability": "https://schema.org/InStock"
+  },
   "isAccessibleForFree": true,
   "license": "https://github.com/ashugaev/telegram-voice-diary-bot/blob/main/LICENSE",
-  "codeRepository": "https://github.com/ashugaev/telegram-voice-diary-bot"
+  "codeRepository": "https://github.com/ashugaev/telegram-voice-diary-bot",
+  "author": {
+    "@type": "Person",
+    "name": "Aleksey Shugaev"
+  },
+  "softwareRequirements": "Telegram account, Notion database, OpenAI API key"
 }
 </script>
 <script type="application/ld+json">
@@ -63,7 +73,7 @@
       "name": "Где хранится дневник?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "В твоей базе Notion. Бот пишет строку и не хранит ничего: ни копий заметок, ни аккаунтов, ни нашего сервера посередине. Процесс поднимаешь ты, поэтому путь данных — Telegram, твоя машина, твой Notion."
+        "text": "В твоей базе Notion. На своей копии путь такой: Telegram, твоя машина, твой Notion, и больше нигде ничего не остаётся. Публичный демо-бот крутится на чужой машине и держит запись ровно столько, сколько нужно, чтобы записать строку в Notion."
       }
     },
     {
@@ -147,7 +157,7 @@
         <a class="btn" href="https://t.me/pizdabol_ai_bot"><svg class="ico" aria-hidden="true"><use href="#i-telegram"></use></svg>Открыть в Telegram</a>
         <a class="btn btn-ghost" href="https://github.com/ashugaev/telegram-voice-diary-bot"><svg class="ico" aria-hidden="true"><use href="#i-code"></use></svg>Поднять свою копию</a>
       </div>
-      <p class="fineprint">Каждая запись ложится в твой Notion. Мы не храним ничего — нашего сервера посередине нет.</p>
+      <p class="fineprint">Своя копия: запись идёт с твоей машины прямо в твой Notion, посередине ничего нашего. Демо-бот — общий инстанс: попробуй на нём, потом подними свой.</p>
     </div>
 
     <div class="hero-thread" id="thread">
@@ -269,12 +279,12 @@
   </section>
 
   <section class="cases">
-    <h2 class="section-title">Зачем им это на самом деле</h2>
+    <h2 class="section-title">Четыре сценария, под которые он сделан</h2>
     <ul class="case-list">
       <li>
         <svg class="ico ico-lg" aria-hidden="true"><use href="#i-loop"></use></svg>
         <h3>Выйти из своей же петли</h3>
-        <p>Проговори историю, которую себе рассказываешь. Он назовёт искажение, а не покивает — и достанет заметки за месяц, где та же фраза.</p>
+        <p>Проговори историю, которую себе рассказываешь. Он не покивает, а возразит — опираясь на прежние заметки.</p>
       </li>
       <li>
         <svg class="ico ico-lg" aria-hidden="true"><use href="#i-scale"></use></svg>
@@ -310,7 +320,7 @@
     <dl class="spec">
       <div>
         <dt>Где хранится дневник?</dt>
-        <dd>В твоей базе Notion. Бот пишет строку и не хранит ничего: ни копий заметок, ни аккаунтов, ни нашего сервера посередине. Процесс поднимаешь ты, поэтому путь данных — Telegram, твоя машина, твой Notion.</dd>
+        <dd>В твоей базе Notion. На своей копии путь такой: Telegram, твоя машина, твой Notion, и больше нигде ничего не остаётся. Публичный демо-бот крутится на чужой машине и держит запись ровно столько, сколько нужно, чтобы записать строку в Notion.</dd>
       </div>
       <div>
         <dt>Нужно ли что-то печатать?</dt>
@@ -333,7 +343,14 @@
 
   <section class="own">
     <h2 class="section-title">Подними у себя</h2>
-    <p class="own-copy">Открытый код на Python. Твой токен Telegram, твой ключ OpenAI, твоя база Notion, на твоей машине. Заметки не попадают на нашу инфраструктуру, потому что её нет. Клонируй, заполни <code>.env</code>, запусти процесс — вся установка.</p>
+    <p class="own-copy">Открытый код на Python. Твой токен Telegram, твой ключ OpenAI, твоя база Notion, на твоей машине. На своей копии заметки не попадают ни на чью чужую инфраструктуру. Клонируй, заполни <code>.env</code>, запусти процесс — вся установка.</p>
+    <p class="need-title">Что нужно до первой заметки</p>
+    <ul class="need">
+      <li>Токен бота от @BotFather</li>
+      <li>Токен интеграции Notion и база, которой он выдан доступ</li>
+      <li>Ключ OpenAI</li>
+      <li>Python 3.11 на любой машине, которая всегда включена — минут десять</li>
+    </ul>
     <div class="cta-row">
       <a class="btn" href="https://t.me/pizdabol_ai_bot"><svg class="ico" aria-hidden="true"><use href="#i-telegram"></use></svg>Открыть в Telegram</a>
       <a class="btn btn-ghost" href="https://github.com/ashugaev/telegram-voice-diary-bot"><svg class="ico" aria-hidden="true"><use href="#i-code"></use></svg>Смотреть код</a>

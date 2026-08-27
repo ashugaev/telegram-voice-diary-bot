@@ -46,10 +46,21 @@
   "operatingSystem": "Telegram",
   "url": "https://pizdabol.app/",
   "description": "Telegram bot that turns voice notes into structured Notion diary entries and coaches you on what it reads.",
-  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD",
+    "availability": "https://schema.org/InStock"
+  },
   "isAccessibleForFree": true,
   "license": "https://github.com/ashugaev/telegram-voice-diary-bot/blob/main/LICENSE",
-  "codeRepository": "https://github.com/ashugaev/telegram-voice-diary-bot"
+  "codeRepository": "https://github.com/ashugaev/telegram-voice-diary-bot",
+  "inLanguage": "en",
+  "author": {
+    "@type": "Person",
+    "name": "Aleksey Shugaev"
+  },
+  "softwareRequirements": "Telegram account, Notion database, OpenAI API key"
 }
 </script>
 <script type="application/ld+json">
@@ -62,7 +73,7 @@
       "name": "Where is my diary stored?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "In your own Notion database. The bot writes a row and keeps nothing: no copies of your notes, no accounts, no server of ours in the middle. You run the process yourself, so the data path is Telegram to your machine to your Notion."
+        "text": "In your own Notion database. Running your own copy, the path is Telegram to your machine to your Notion, and nothing is kept anywhere else. The public demo bot runs on someone else's box and holds the entry only as long as it takes to write your Notion row."
       }
     },
     {
@@ -146,7 +157,7 @@
         <a class="btn" href="https://t.me/pizdabol_ai_bot"><svg class="ico" aria-hidden="true"><use href="#i-telegram"></use></svg>Open in Telegram</a>
         <a class="btn btn-ghost" href="https://github.com/ashugaev/telegram-voice-diary-bot"><svg class="ico" aria-hidden="true"><use href="#i-code"></use></svg>Run your own copy</a>
       </div>
-      <p class="fineprint">Every entry lands in your own Notion. We store nothing — there is no server of ours in the middle.</p>
+      <p class="fineprint">Self-hosted: entries go from your box straight to your Notion, nothing of ours in between. The demo bot is a shared instance — try it, then run your own.</p>
     </div>
 
     <div class="hero-thread" id="thread">
@@ -268,12 +279,12 @@
   </section>
 
   <section class="cases">
-    <h2 class="section-title">What people actually use it for</h2>
+    <h2 class="section-title">Four things it is built for</h2>
     <ul class="case-list">
       <li>
         <svg class="ico ico-lg" aria-hidden="true"><use href="#i-loop"></use></svg>
         <h3>Break the loop you are stuck in</h3>
-        <p>Say the story you keep telling yourself out loud. It names the distortion instead of nodding along, and it has your last month of notes to prove the pattern.</p>
+        <p>Say the story you keep telling yourself out loud. It pushes back instead of nodding along, with your earlier notes as context.</p>
       </li>
       <li>
         <svg class="ico ico-lg" aria-hidden="true"><use href="#i-scale"></use></svg>
@@ -309,7 +320,7 @@
     <dl class="spec">
       <div>
         <dt>Where is my diary stored?</dt>
-        <dd>In your own Notion database. The bot writes a row and keeps nothing: no copies of your notes, no accounts, no server of ours in the middle. You run the process yourself, so the data path is Telegram to your machine to your Notion.</dd>
+        <dd>In your own Notion database. Running your own copy, the path is Telegram to your machine to your Notion, and nothing is kept anywhere else. The public demo bot runs on someone else's box and holds the entry only as long as it takes to write your Notion row.</dd>
       </div>
       <div>
         <dt>Do I have to type anything?</dt>
@@ -332,7 +343,14 @@
 
   <section class="own">
     <h2 class="section-title">Run it yourself</h2>
-    <p class="own-copy">Open source Python. Your Telegram token, your OpenAI key, your Notion database, on a box you control. Your notes never touch our infrastructure, because there isn't any. Clone it, fill in <code>.env</code>, start the process — that's the whole install.</p>
+    <p class="own-copy">Open source Python. Your Telegram token, your OpenAI key, your Notion database, on a box you control. Run your own copy and your notes never touch anyone else's infrastructure. Clone it, fill in <code>.env</code>, start the process — that's the whole install.</p>
+    <p class="need-title">What you need before the first note</p>
+    <ul class="need">
+      <li>Telegram bot token from @BotFather</li>
+      <li>Notion integration token and a database shared with it</li>
+      <li>OpenAI API key</li>
+      <li>Python 3.11 on any always-on box — about ten minutes</li>
+    </ul>
     <div class="cta-row">
       <a class="btn" href="https://t.me/pizdabol_ai_bot"><svg class="ico" aria-hidden="true"><use href="#i-telegram"></use></svg>Open in Telegram</a>
       <a class="btn btn-ghost" href="https://github.com/ashugaev/telegram-voice-diary-bot"><svg class="ico" aria-hidden="true"><use href="#i-code"></use></svg>Read the source</a>
