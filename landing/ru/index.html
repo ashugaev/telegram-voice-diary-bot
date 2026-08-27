@@ -3,27 +3,32 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pizdabol — голосовые заметки в дневник Notion, с коучем в комплекте</title>
-<meta name="description" content="Отправь голосовое в Telegram. Pizdabol расшифрует, придумает заголовок, проставит теги, сохранит одну строку в дневнике Notion — и скажет, чего ты избегаешь.">
+<title>Pizdabol — телеграм-бот голосового дневника для Notion</title>
+<meta name="description" content="Отправь голосовое в Telegram: расшифровка, заголовок, теги и одна строка в твоём дневнике Notion, а следом честный ответ от бота, который помнит все заметки. Открытый код, свой сервер, на нашей стороне не хранится ничего.">
 <link rel="canonical" href="https://pizdabol.app/ru/">
 <link rel="alternate" hreflang="en" href="https://pizdabol.app/">
 <link rel="alternate" hreflang="ru" href="https://pizdabol.app/ru/">
 <link rel="alternate" hreflang="x-default" href="https://pizdabol.app/">
-<meta name="robots" content="index, follow">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+<meta name="author" content="Aleksey Shugaev">
+<meta name="keywords" content="телеграм бот дневник, голосовые заметки в notion, дневник notion автоматизация, голосовой дневник, ai дневник коуч">
 <meta name="theme-color" content="#14101f">
 
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Pizdabol">
 <meta property="og:locale" content="ru_RU">
 <meta property="og:url" content="https://pizdabol.app/ru/">
-<meta property="og:title" content="Pizdabol — голосовые заметки в дневник Notion, с коучем в комплекте">
-<meta property="og:description" content="Наговори в Telegram. Он подошьёт запись в Notion, а потом скажет, чего ты избегаешь.">
+<meta property="og:title" content="Pizdabol — телеграм-бот голосового дневника для Notion">
+<meta property="og:description" content="Голосовые в Telegram становятся строками с заголовком и тегами в твоём дневнике Notion — и бот отвечает честно.">
 <meta property="og:image" content="https://pizdabol.app/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Заголовок лендинга Pizdabol: скажи вслух, он запишет и поспорит">
+<meta property="og:locale:alternate" content="en_US">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Pizdabol — голосовые заметки в дневник Notion, с коучем в комплекте">
-<meta name="twitter:description" content="Наговори в Telegram. Он подошьёт запись в Notion, а потом скажет, чего ты избегаешь.">
+<meta name="twitter:image:alt" content="Заголовок лендинга Pizdabol: скажи вслух, он запишет и поспорит">
+<meta name="twitter:title" content="Pizdabol — телеграм-бот голосового дневника для Notion">
+<meta name="twitter:description" content="Голосовые в Telegram становятся строками с заголовком и тегами в твоём дневнике Notion — и бот отвечает честно.">
 <meta name="twitter:image" content="https://pizdabol.app/og.png">
 
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -46,6 +51,54 @@
   "isAccessibleForFree": true,
   "license": "https://github.com/ashugaev/telegram-voice-diary-bot/blob/main/LICENSE",
   "codeRepository": "https://github.com/ashugaev/telegram-voice-diary-bot"
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Где хранится дневник?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "В твоей базе Notion. Бот пишет строку и не хранит ничего: ни копий заметок, ни аккаунтов, ни нашего сервера посередине. Процесс поднимаешь ты, поэтому путь данных — Telegram, твоя машина, твой Notion."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Нужно ли что-то печатать?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Нет. Отправь голосовое — расшифровка, заголовок, теги и дата появятся сами. Текстовые сообщения работают так же, если писать удобнее."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Сколько это стоит?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Код бесплатный и открытый. Платишь только за свой OpenAI и за машину, на которой запускаешь бота."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Можно изменить манеру общения?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Да. Скажи не морализировать или отвечать одной строкой — он сохранит это правилом. Правила лежат на странице Notion, её можно править руками."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Подходит ли к шаблону Notion Journal?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Да. Одна запись — одна строка с заголовком, текстом, тегами и датой, так что вьюхи и фильтры журнала продолжают работать."
+      }
+    }
+  ]
 }
 </script>
 </head>
@@ -93,17 +146,18 @@
     </div>
 
     <div class="hero-thread" id="thread">
-      <div class="tg" role="img" aria-label="Чат в Telegram: голосовое на 47 секунд превращается в запись дневника «Девятая попытка проснуться», бот отвечает прямо, автор просит не смягчать, бот обновляет память о нём.">
+      <div class="tg" role="img" aria-label="Чат в Telegram: голосовое на 47 секунд превращается в черновик записи с кнопками правки, бот подтверждает сохранение строки в Notion, отвечает прямо в режиме роаста и обновляет память об авторе.">
         <header class="tg-head">
           <img class="tg-ava" src="/avatar.svg" width="40" height="40" alt="" aria-hidden="true">
           <div>
-            <p class="tg-name">Pizdabol</p>
+            <p class="tg-name">Diary</p>
             <p class="tg-status"><span class="s-online">в сети</span><span class="s-typing">печатает…</span></p>
           </div>
           <span class="tg-dots" aria-hidden="true">⋮</span>
         </header>
 
         <div class="tg-body">
+          <div class="tg-scroll">
           <p class="tg-day">Вторник</p>
 
           <div class="slot" style="--i:0"><article class="msg out">
@@ -135,46 +189,66 @@
 
           <div class="slot" style="--i:1"><div class="stack">
             <article class="msg in card">
-              <p class="card-kicker">Черновик записи</p>
-              <h2 class="card-title">Девятая попытка проснуться</h2>
+              <p class="quote"><b>Ты</b>Голосовое сообщение</p>
+              <p class="card-title">Девятая попытка проснуться</p>
               <p class="card-body">Опять сказал в девять, опять начал в полдень. Вечер потратил на продуктивность, о которой никто не просил, и вот полночь, и я злюсь на себя теми же словами, что в воскресенье.</p>
-              <p class="tags"><span>#режим</span><span>#работа</span><span>#я</span></p>
+              <p class="card-date">Дата: <span>Сегодня (2026-08-26)</span></p>
+              <p class="card-tag">Daily</p>
               <p class="meta">23:41</p>
-              <p class="kbd" aria-hidden="true"><span>Формат</span><span>Заголовок</span><span>Теги</span><span>Дата</span><span class="save">Сохранить</span></p>
+              <p class="kbd" aria-hidden="true">
+                <span>✎ Заголовок</span><span>✎ Текст</span><span>✎ Теги</span>
+                <span class="w4">✦ Формат</span>
+                <span class="w4">Дата: Сегодня (2026-08-26)</span>
+                <span class="w4">В хайлайты ⭐</span>
+                <span class="w4">🔥 Роаст</span>
+                <span class="w4 save">✓ Сохранить</span>
+                <span class="w4">Отмена</span>
+              </p>
             </article>
             <p class="typing t1" aria-hidden="true"><span></span><span></span><span></span></p>
           </div></div>
 
           <div class="slot" style="--i:2"><div class="stack">
+            <article class="msg in saved">
+              <p class="quote"><b>Ты</b>Голосовое сообщение</p>
+              <p class="saved-line">✓ Сохранено в Notion и проверено</p>
+              <p class="meta">23:41</p>
+            </article>
+            <p class="typing t2" aria-hidden="true"><span></span><span></span><span></span></p>
+          </div></div>
+
+          <div class="slot" style="--i:3"><div class="stack">
             <article class="msg in roast">
               <p class="roast-kicker">🔥 Роаст</p>
               <p>У тебя не проблема с утром, у тебя проблема с часом ночи. Третья заметка за месяц с той же фразой. Начать считать вслух?</p>
               <p class="meta">23:42</p>
             </article>
-            <p class="typing t2" aria-hidden="true"><span></span><span></span><span></span></p>
+            <p class="typing t3" aria-hidden="true"><span></span><span></span><span></span></p>
           </div></div>
 
-          <div class="slot" style="--i:3"><article class="msg out text">
+          <div class="slot" style="--i:4"><article class="msg out text">
             <p>считай. только не жалей меня</p>
             <p class="meta">23:42 <span class="checks" aria-hidden="true">✓✓</span></p>
           </article></div>
 
-          <div class="slot" style="--i:4"><div class="stack">
+          <div class="slot" style="--i:5"><div class="stack">
             <article class="msg in memo">
               <p class="memo-kicker">🧠 Память обновлена</p>
-              <p class="memo-line"><b>О тебе:</b> вечерняя продуктивность — это избегание, а не результат.</p>
-              <p class="memo-line"><b>Правило:</b> без смягчений — говорить прямо.</p>
+              <p class="memo-line"><b>О тебе:</b></p>
+              <p class="memo-line">+ вечерняя продуктивность — это избегание, а не результат.</p>
+              <p class="memo-line"><b>Правила:</b></p>
+              <p class="memo-line">+ без смягчений — говорить прямо.</p>
               <p class="meta">23:42</p>
             </article>
-            <p class="typing t3" aria-hidden="true"><span></span><span></span><span></span></p>
+            <p class="typing t4" aria-hidden="true"><span></span><span></span><span></span></p>
           </div></div>
-
-          <div class="slot" style="--i:5"><p class="receipt"><svg class="ico n-mark" aria-hidden="true"><use href="#i-notion"></use></svg> Сохранено в Notion — Дневник / 26 авг 2026</p></div>
+          </div>
         </div>
 
         <footer class="tg-input" aria-hidden="true">
-          <span class="tg-clip">🖇</span>
+          <span class="tg-smile" aria-hidden="true"></span>
           <span class="tg-ph">Сообщение</span>
+          <span class="tg-clip">🖇</span>
           <span class="tg-mic"></span>
         </footer>
       </div>
@@ -268,6 +342,32 @@
       <li><code>/rules</code><span>Показать, что он усвоил о том, как с тобой говорить</span></li>
       <li><code>/help</code><span>Команды и кнопки превью</span></li>
     </ul>
+  </section>
+
+  <section class="faq" id="faq">
+    <h2 class="section-title">Что спрашивают первым</h2>
+    <dl class="spec">
+      <div>
+        <dt>Где хранится дневник?</dt>
+        <dd>В твоей базе Notion. Бот пишет строку и не хранит ничего: ни копий заметок, ни аккаунтов, ни нашего сервера посередине. Процесс поднимаешь ты, поэтому путь данных — Telegram, твоя машина, твой Notion.</dd>
+      </div>
+      <div>
+        <dt>Нужно ли что-то печатать?</dt>
+        <dd>Нет. Отправь голосовое — расшифровка, заголовок, теги и дата появятся сами. Текстовые сообщения работают так же, если писать удобнее.</dd>
+      </div>
+      <div>
+        <dt>Сколько это стоит?</dt>
+        <dd>Код бесплатный и открытый. Платишь только за свой OpenAI и за машину, на которой запускаешь бота.</dd>
+      </div>
+      <div>
+        <dt>Можно изменить манеру общения?</dt>
+        <dd>Да. Скажи не морализировать или отвечать одной строкой — он сохранит это правилом. Правила лежат на странице Notion, её можно править руками.</dd>
+      </div>
+      <div>
+        <dt>Подходит ли к шаблону Notion Journal?</dt>
+        <dd>Да. Одна запись — одна строка с заголовком, текстом, тегами и датой, так что вьюхи и фильтры журнала продолжают работать.</dd>
+      </div>
+    </dl>
   </section>
 
   <section class="own">

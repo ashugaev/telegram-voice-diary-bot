@@ -3,27 +3,32 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pizdabol — voice notes to a Notion diary, with a coach attached</title>
-<meta name="description" content="Send a voice note to Telegram. Pizdabol transcribes it, titles it, tags it, saves one row in your Notion journal — then tells you what you keep avoiding.">
+<title>Pizdabol — Telegram voice diary bot for Notion</title>
+<meta name="description" content="Send a voice note to Telegram: it transcribes, titles, tags and saves one row in your Notion journal, then answers like a coach who remembers every note. Open source, self-hosted, nothing stored on our side.">
 <link rel="canonical" href="https://pizdabol.app/">
 <link rel="alternate" hreflang="en" href="https://pizdabol.app/">
 <link rel="alternate" hreflang="ru" href="https://pizdabol.app/ru/">
 <link rel="alternate" hreflang="x-default" href="https://pizdabol.app/">
-<meta name="robots" content="index, follow">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+<meta name="author" content="Aleksey Shugaev">
+<meta name="keywords" content="telegram diary bot, voice notes to notion, notion journal automation, voice journaling app, ai diary coach, self-hosted telegram bot">
 <meta name="theme-color" content="#14101f">
 
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Pizdabol">
 <meta property="og:locale" content="en_US">
 <meta property="og:url" content="https://pizdabol.app/">
-<meta property="og:title" content="Pizdabol — voice notes to a Notion diary, with a coach attached">
-<meta property="og:description" content="Talk into Telegram. It files the entry in Notion, then tells you what you keep avoiding.">
+<meta property="og:title" content="Pizdabol — Telegram voice diary bot for Notion">
+<meta property="og:description" content="Voice notes in Telegram become titled, tagged rows in your own Notion journal — and the bot answers honestly.">
 <meta property="og:image" content="https://pizdabol.app/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Pizdabol landing headline: say it out loud, it files the entry, then it argues with you">
+<meta property="og:locale:alternate" content="ru_RU">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Pizdabol — voice notes to a Notion diary, with a coach attached">
-<meta name="twitter:description" content="Talk into Telegram. It files the entry in Notion, then tells you what you keep avoiding.">
+<meta name="twitter:image:alt" content="Pizdabol landing headline: say it out loud, it files the entry, then it argues with you">
+<meta name="twitter:title" content="Pizdabol — Telegram voice diary bot for Notion">
+<meta name="twitter:description" content="Voice notes in Telegram become titled, tagged rows in your own Notion journal — and the bot answers honestly.">
 <meta name="twitter:image" content="https://pizdabol.app/og.png">
 
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -45,6 +50,54 @@
   "isAccessibleForFree": true,
   "license": "https://github.com/ashugaev/telegram-voice-diary-bot/blob/main/LICENSE",
   "codeRepository": "https://github.com/ashugaev/telegram-voice-diary-bot"
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Where is my diary stored?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "In your own Notion database. The bot writes a row and keeps nothing: no copies of your notes, no accounts, no server of ours in the middle. You run the process yourself, so the data path is Telegram to your machine to your Notion."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Do I have to type anything?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. Send a voice note and it is transcribed, titled, tagged, and dated for you. Typed messages work the same way if you would rather write."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What does it cost?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "The code is free and open source. You pay only your own OpenAI usage and whatever the box you run it on costs."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Can I change how it talks to me?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. Tell it to stop moralising or answer in one line and it keeps that as a rule. The rules live on a Notion page you can edit by hand."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Does it fit the Notion Journal template?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. One entry becomes one row with title, text, tags, and date, so the journal views and filters keep working."
+      }
+    }
+  ]
 }
 </script>
 </head>
@@ -92,17 +145,18 @@
     </div>
 
     <div class="hero-thread" id="thread">
-      <div class="tg" role="img" aria-label="Telegram chat: a 47-second voice note becomes a Notion diary entry titled Ninth attempt at a morning, the bot answers bluntly, the author asks it to stay blunt, and the bot updates what it remembers.">
+      <div class="tg" role="img" aria-label="Telegram chat: a 47-second voice note becomes a draft diary entry with edit buttons, the bot confirms it saved the row to Notion, answers bluntly in roast mode, and then updates what it remembers about the author.">
         <header class="tg-head">
           <img class="tg-ava" src="/avatar.svg" width="40" height="40" alt="" aria-hidden="true">
           <div>
-            <p class="tg-name">Pizdabol</p>
+            <p class="tg-name">Diary</p>
             <p class="tg-status"><span class="s-online">online</span><span class="s-typing">typing…</span></p>
           </div>
           <span class="tg-dots" aria-hidden="true">⋮</span>
         </header>
 
         <div class="tg-body">
+          <div class="tg-scroll">
           <p class="tg-day">Tuesday</p>
 
           <div class="slot" style="--i:0"><article class="msg out">
@@ -134,46 +188,66 @@
 
           <div class="slot" style="--i:1"><div class="stack">
             <article class="msg in card">
-              <p class="card-kicker">Draft entry</p>
-              <h2 class="card-title">Ninth attempt at a morning</h2>
+              <p class="quote"><b>You</b>Voice message</p>
+              <p class="card-title">Ninth attempt at a morning</p>
               <p class="card-body">Said nine again, started at noon again. Spent the evening being productive about things nobody asked for, and now it's midnight and I'm annoyed at myself in the exact same words as Sunday.</p>
-              <p class="tags"><span>#routine</span><span>#work</span><span>#self</span></p>
+              <p class="card-date">Date: <span>Today (2026-08-26)</span></p>
+              <p class="card-tag">Daily</p>
               <p class="meta">23:41</p>
-              <p class="kbd" aria-hidden="true"><span>Format</span><span>Title</span><span>Tags</span><span>Date</span><span class="save">Save</span></p>
+              <p class="kbd" aria-hidden="true">
+                <span>✎ Title</span><span>✎ Text</span><span>✎ Tags</span>
+                <span class="w4">✦ Format</span>
+                <span class="w4">Date: Today (2026-08-26)</span>
+                <span class="w4">Mark as Highlight ⭐</span>
+                <span class="w4">🔥 Roast</span>
+                <span class="w4 save">✓ Save</span>
+                <span class="w4">Cancel</span>
+              </p>
             </article>
             <p class="typing t1" aria-hidden="true"><span></span><span></span><span></span></p>
           </div></div>
 
           <div class="slot" style="--i:2"><div class="stack">
+            <article class="msg in saved">
+              <p class="quote"><b>You</b>Voice message</p>
+              <p class="saved-line">✓ Saved to Notion and verified</p>
+              <p class="meta">23:41</p>
+            </article>
+            <p class="typing t2" aria-hidden="true"><span></span><span></span><span></span></p>
+          </div></div>
+
+          <div class="slot" style="--i:3"><div class="stack">
             <article class="msg in roast">
               <p class="roast-kicker">🔥 Roast</p>
               <p>You don't have a morning problem, you have a 1 a.m. problem. Third note this month with the same sentence in it. Want me to start counting out loud?</p>
               <p class="meta">23:42</p>
             </article>
-            <p class="typing t2" aria-hidden="true"><span></span><span></span><span></span></p>
+            <p class="typing t3" aria-hidden="true"><span></span><span></span><span></span></p>
           </div></div>
 
-          <div class="slot" style="--i:3"><article class="msg out text">
+          <div class="slot" style="--i:4"><article class="msg out text">
             <p>counting is fine. just don't be nice about it</p>
             <p class="meta">23:42 <span class="checks" aria-hidden="true">✓✓</span></p>
           </article></div>
 
-          <div class="slot" style="--i:4"><div class="stack">
+          <div class="slot" style="--i:5"><div class="stack">
             <article class="msg in memo">
               <p class="memo-kicker">🧠 Memory updated</p>
-              <p class="memo-line"><b>About you:</b> evening productivity is avoidance, not output.</p>
-              <p class="memo-line"><b>Rule:</b> no cushioning — say it straight.</p>
+              <p class="memo-line"><b>About you:</b></p>
+              <p class="memo-line">+ evening productivity is avoidance, not output.</p>
+              <p class="memo-line"><b>Rules:</b></p>
+              <p class="memo-line">+ no cushioning — say it straight.</p>
               <p class="meta">23:42</p>
             </article>
-            <p class="typing t3" aria-hidden="true"><span></span><span></span><span></span></p>
+            <p class="typing t4" aria-hidden="true"><span></span><span></span><span></span></p>
           </div></div>
-
-          <div class="slot" style="--i:5"><p class="receipt"><svg class="ico n-mark" aria-hidden="true"><use href="#i-notion"></use></svg> Saved to Notion — Diary / 26 Aug 2026</p></div>
+          </div>
         </div>
 
         <footer class="tg-input" aria-hidden="true">
-          <span class="tg-clip">🖇</span>
+          <span class="tg-smile" aria-hidden="true"></span>
           <span class="tg-ph">Message</span>
+          <span class="tg-clip">🖇</span>
           <span class="tg-mic"></span>
         </footer>
       </div>
@@ -267,6 +341,32 @@
       <li><code>/rules</code><span>Show what it learned about how to talk to you</span></li>
       <li><code>/help</code><span>Commands and preview buttons</span></li>
     </ul>
+  </section>
+
+  <section class="faq" id="faq">
+    <h2 class="section-title">Questions people ask first</h2>
+    <dl class="spec">
+      <div>
+        <dt>Where is my diary stored?</dt>
+        <dd>In your own Notion database. The bot writes a row and keeps nothing: no copies of your notes, no accounts, no server of ours in the middle. You run the process yourself, so the data path is Telegram to your machine to your Notion.</dd>
+      </div>
+      <div>
+        <dt>Do I have to type anything?</dt>
+        <dd>No. Send a voice note and it is transcribed, titled, tagged, and dated for you. Typed messages work the same way if you would rather write.</dd>
+      </div>
+      <div>
+        <dt>What does it cost?</dt>
+        <dd>The code is free and open source. You pay only your own OpenAI usage and whatever the box you run it on costs.</dd>
+      </div>
+      <div>
+        <dt>Can I change how it talks to me?</dt>
+        <dd>Yes. Tell it to stop moralising or answer in one line and it keeps that as a rule. The rules live on a Notion page you can edit by hand.</dd>
+      </div>
+      <div>
+        <dt>Does it fit the Notion Journal template?</dt>
+        <dd>Yes. One entry becomes one row with title, text, tags, and date, so the journal views and filters keep working.</dd>
+      </div>
+    </dl>
   </section>
 
   <section class="own">
