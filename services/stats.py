@@ -3,6 +3,7 @@ from datetime import date, datetime, timedelta
 import zoneinfo
 
 from config import settings
+from services.i18n import normalize_language, t
 from services.notion import AUDIO_DURATION_PROPERTY, CREATED_PROPERTY, get_diary_pages
 
 
@@ -35,6 +36,20 @@ MONTH_GENITIVE_RU = {
     10: "октября",
     11: "ноября",
     12: "декабря",
+}
+MONTH_NAMES_EN = {
+    1: "January",
+    2: "February",
+    3: "March",
+    4: "April",
+    5: "May",
+    6: "June",
+    7: "July",
+    8: "August",
+    9: "September",
+    10: "October",
+    11: "November",
+    12: "December",
 }
 
 
@@ -113,12 +128,24 @@ def _add_months(value: date, months: int) -> date:
     return date(month_index // 12, month_index % 12 + 1, 1)
 
 
-def _date_label(value: date) -> str:
-    return f"{value.day} {MONTH_GENITIVE_RU[value.month]}"
+def _is_ru(language: str | None) -> bool:
+    return _stats_language(language) == "ru"
 
 
-def _month_label(value: date) -> str:
-    return f"{MONTH_NAMES_RU[value.month]} {value.year}"
+def _stats_language(language: str | None) -> str:
+    return normalize_language(language) if language else "ru"
+
+
+def _date_label(value: date, language: str | None = None) -> str:
+    if _is_ru(language):
+        return f"{value.day} {MONTH_GENITIVE_RU[value.month]}"
+    return f"{MONTH_NAMES_EN[value.month]} {value.day}"
+
+
+def _month_label(value: date, language: str | None = None) -> str:
+    if _is_ru(language):
+        return f"{MONTH_NAMES_RU[value.month]} {value.year}"
+    return f"{MONTH_NAMES_EN[value.month]} {value.year}"
 
 
 def _bucket(label: str, records: list[AudioRecord]) -> AudioBucket:
@@ -129,7 +156,8 @@ def _bucket(label: str, records: list[AudioRecord]) -> AudioBucket:
     )
 
 
-def build_audio_stats_from_pages(pages: list[dict], today: date | None = None) -> AudioStats:
+def build_audio_stats_from_pages(pages: list[dict], today: date | None = None, language: str | None = None) -> AudioStats:
+    language = _stats_language(language)
     today = today or _local_today()
     records = _audio_records(pages)
     week_start = today - timedelta(days=STAT_DAYS - 1)
@@ -139,7 +167,7 @@ def build_audio_stats_from_pages(pages: list[dict], today: date | None = None) -
     for offset in range(STAT_DAYS):
         current_day = week_start + timedelta(days=offset)
         daily_records = [record for record in records if record.entry_date == current_day]
-        daily.append(_bucket(_date_label(current_day), daily_records))
+        daily.append(_bucket(_date_label(current_day, language), daily_records))
 
     monthly = []
     for offset in range(STAT_MONTHS):
@@ -150,7 +178,7 @@ def build_audio_stats_from_pages(pages: list[dict], today: date | None = None) -
             for record in records
             if current_month <= record.entry_date < next_month
         ]
-        monthly.append(_bucket(_month_label(current_month), month_records))
+        monthly.append(_bucket(_month_label(current_month, language), month_records))
 
     week_records = [
         record
@@ -158,19 +186,20 @@ def build_audio_stats_from_pages(pages: list[dict], today: date | None = None) -
         if week_start <= record.entry_date <= today
     ]
     return AudioStats(
-        total=_bucket("все время", records),
-        week=_bucket("последние 7 дней", week_records),
+        total=_bucket(t("stats.all_time", language), records),
+        week=_bucket(t("stats.last_7_days", language), week_records),
         daily=daily,
         monthly=monthly,
     )
 
 
-async def build_audio_stats(today: date | None = None) -> AudioStats:
+async def build_audio_stats(today: date | None = None, language: str | None = None) -> AudioStats:
     pages = await get_diary_pages()
-    return build_audio_stats_from_pages(pages, today=today)
+    return build_audio_stats_from_pages(pages, today=today, language=language)
 
 
-def build_period_stats_from_pages(pages: list[dict]) -> PeriodStats:
+def build_period_stats_from_pages(pages: list[dict], language: str | None = None) -> PeriodStats:
+    language = _stats_language(language)
     records = _audio_records(pages)
     day_buckets = {}
     for record in records:
@@ -179,7 +208,7 @@ def build_period_stats_from_pages(pages: list[dict]) -> PeriodStats:
     busiest_day = None
     if day_buckets:
         buckets = [
-            _bucket(_date_label(day), day_records)
+            _bucket(_date_label(day, language), day_records)
             for day, day_records in day_buckets.items()
         ]
         busiest_day = max(buckets, key=lambda bucket: (bucket.seconds, bucket.count))
@@ -198,58 +227,87 @@ def _rounded_minutes(seconds: int) -> int:
     return max(1, (seconds + 30) // 60)
 
 
-def format_duration(seconds: int) -> str:
+def format_duration(seconds: int, language: str | None = None) -> str:
+    language = _stats_language(language)
     minutes = _rounded_minutes(seconds)
     if minutes == 0:
-        return "0 мин"
+        return t("stats.duration.zero", language)
     hours, minutes = divmod(minutes, 60)
     if hours and minutes:
-        return f"{hours} ч {minutes:02d} мин"
+        return t("stats.duration.hours_minutes", language, hours=hours, minutes=f"{minutes:02d}")
     if hours:
-        return f"{hours} ч"
-    return f"{minutes} мин"
+        return t("stats.duration.hours", language, hours=hours)
+    return t("stats.duration.minutes", language, minutes=minutes)
 
 
-def _audio_label(value: int) -> str:
-    return f"{value} аудио"
+def _audio_label(value: int, language: str | None = None) -> str:
+    language = _stats_language(language)
+    return t("stats.audio_count", language, count=value)
 
 
-def _bucket_line(bucket: AudioBucket) -> str:
-    return f"- {bucket.label}: {format_duration(bucket.seconds)} · {_audio_label(bucket.count)}"
+def _bucket_line(bucket: AudioBucket, language: str | None = None) -> str:
+    return f"- {bucket.label}: {format_duration(bucket.seconds, language)} · {_audio_label(bucket.count, language)}"
 
 
-def format_audio_stats(stats: AudioStats) -> str:
+def format_audio_stats(stats: AudioStats, language: str | None = None) -> str:
+    language = _stats_language(language)
     return "\n".join([
-        "*Аудио статистика*",
+        t("stats.audio_header", language),
         "",
-        f"Всего: {format_duration(stats.total.seconds)} · {_audio_label(stats.total.count)}",
-        f"За неделю: {format_duration(stats.week.seconds)} · {_audio_label(stats.week.count)}",
+        t(
+            "stats.total_line",
+            language,
+            duration=format_duration(stats.total.seconds, language),
+            count=_audio_label(stats.total.count, language),
+        ),
+        t(
+            "stats.week_line",
+            language,
+            duration=format_duration(stats.week.seconds, language),
+            count=_audio_label(stats.week.count, language),
+        ),
         "",
-        "*По дням за последние 7 дней*",
-        *[_bucket_line(bucket) for bucket in stats.daily],
+        t("stats.daily_header", language),
+        *[_bucket_line(bucket, language) for bucket in stats.daily],
         "",
-        "*По месяцам за последние 6 месяцев*",
-        *[_bucket_line(bucket) for bucket in stats.monthly],
+        t("stats.monthly_header", language),
+        *[_bucket_line(bucket, language) for bucket in stats.monthly],
     ])
 
 
-def format_daily_stats(stats: PeriodStats) -> str:
+def format_daily_stats(stats: PeriodStats, language: str | None = None) -> str:
+    language = _stats_language(language)
     return "\n".join([
-        "*Цифры дня*",
-        f"Записи: {stats.entry_count}",
-        f"Аудио: {format_duration(stats.audio_seconds)} · {_audio_label(stats.voice_count)}",
+        t("stats.day_header", language),
+        t("stats.entries_line", language, count=stats.entry_count),
+        t(
+            "stats.audio_line",
+            language,
+            duration=format_duration(stats.audio_seconds, language),
+            count=_audio_label(stats.voice_count, language),
+        ),
     ])
 
 
-def format_weekly_stats(stats: PeriodStats) -> str:
+def format_weekly_stats(stats: PeriodStats, language: str | None = None) -> str:
+    language = _stats_language(language)
     lines = [
-        "*Цифры недели*",
-        f"Записи: {stats.entry_count}",
-        f"Аудио: {format_duration(stats.audio_seconds)} · {_audio_label(stats.voice_count)}",
+        t("stats.week_header", language),
+        t("stats.entries_line", language, count=stats.entry_count),
+        t(
+            "stats.audio_line",
+            language,
+            duration=format_duration(stats.audio_seconds, language),
+            count=_audio_label(stats.voice_count, language),
+        ),
     ]
     if stats.busiest_day:
         lines.append(
-            f"Самый насыщенный день: {stats.busiest_day.label}, "
-            f"{format_duration(stats.busiest_day.seconds)}"
+            t(
+                "stats.busiest_day",
+                language,
+                day=stats.busiest_day.label,
+                duration=format_duration(stats.busiest_day.seconds, language),
+            )
         )
     return "\n".join(lines)

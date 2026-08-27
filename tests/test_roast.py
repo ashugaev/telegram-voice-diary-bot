@@ -96,6 +96,31 @@ class RoastServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(system.startswith(roast.DEFAULT_SYSTEM_PROMPT))
         self.assertIn("English", system)
 
+    async def test_roast_runtime_language_overrides_env_fallback(self):
+        fake = FakeOpenAI(_chat_response("ok"))
+
+        with patch.object(roast.settings, "openai_api_key", "key"), \
+                patch.object(roast.settings, "roast_language", "Russian"), \
+                patch.object(roast, "client", fake):
+            await roast.roast([{"role": "user", "content": "x"}], language="en")
+
+        system = fake.chat.completions.calls[0]["messages"][0]["content"]
+        self.assertTrue(system.startswith(roast.DEFAULT_SYSTEM_PROMPTS["en"]))
+        self.assertIn("English", system)
+        self.assertIn("Always write the visible answer", system)
+
+    async def test_roast_uses_russian_prompt_for_runtime_russian(self):
+        fake = FakeOpenAI(_chat_response("ok"))
+
+        with patch.object(roast.settings, "openai_api_key", "key"), \
+                patch.object(roast.settings, "roast_language", "English"), \
+                patch.object(roast, "client", fake):
+            await roast.roast([{"role": "user", "content": "x"}], language="ru")
+
+        system = fake.chat.completions.calls[0]["messages"][0]["content"]
+        self.assertTrue(system.startswith(roast.DEFAULT_SYSTEM_PROMPTS["ru"]))
+        self.assertIn("Всегда пиши ответ", system)
+
     async def test_roast_trims_long_chain_to_limit_and_keeps_latest(self):
         fake = FakeOpenAI(_chat_response("ok"))
         chain = [
@@ -231,12 +256,12 @@ class RoastServiceTests(unittest.IsolatedAsyncioTestCase):
 
         with patch.object(roast.settings, "openai_api_key", "key"), \
                 patch.object(roast, "client", fake):
-            await roast.extract_profile_points("entry", _items("known"), focus="work and health")
+            await roast.extract_profile_points("entry", _items("known"), focus="work and health", language="en")
 
         kwargs = fake.chat.completions.calls[0]
         system, user = kwargs["messages"]
-        self.assertTrue(system["content"].startswith(roast.PROFILE_EXTRACTION_PROMPT))
-        self.assertIn(roast.PROFILE_FOCUS_INSTRUCTION, system["content"])
+        self.assertTrue(system["content"].startswith(roast.PROFILE_EXTRACTION_PROMPTS["en"]))
+        self.assertIn(roast.PROFILE_FOCUS_INSTRUCTIONS["en"], system["content"])
         self.assertIn("work and health", user["content"])
         self.assertIn('"focus"', user["content"])
 
@@ -250,6 +275,16 @@ class RoastServiceTests(unittest.IsolatedAsyncioTestCase):
         kwargs = fake.chat.completions.calls[0]
         self.assertEqual(kwargs["messages"][0]["content"], roast.PROFILE_EXTRACTION_PROMPT)
         self.assertNotIn('"focus"', kwargs["messages"][1]["content"])
+
+    async def test_extract_profile_points_uses_runtime_russian_prompt(self):
+        fake = FakeOpenAI(_chat_response(_ops({"action": "create", "text": "fact"})))
+
+        with patch.object(roast.settings, "openai_api_key", "key"), \
+                patch.object(roast, "client", fake):
+            await roast.extract_profile_points("entry", _items("known"), language="ru")
+
+        system = fake.chat.completions.calls[0]["messages"][0]["content"]
+        self.assertEqual(system, roast.PROFILE_EXTRACTION_PROMPTS["ru"])
 
     async def test_extract_profile_points_uses_budget_and_pinned_reasoning_effort(self):
         fake = FakeOpenAI(_chat_response(_ops({"action": "create", "text": "fact"})))

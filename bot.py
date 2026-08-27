@@ -13,7 +13,7 @@ from time import monotonic
 from types import SimpleNamespace
 from typing import Any
 
-from telegram import BotCommand, ForceReply, ReplyParameters, Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import BotCommand, BotCommandScopeChat, ForceReply, ReplyParameters, Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
     ApplicationBuilder,
@@ -29,6 +29,7 @@ from config import settings
 from services import memory, notion_memory, profile_rebuild, roast
 from services.diary_dates import diary_today
 from services.formatter import format_entry
+from services.i18n import LANGUAGE_NAMES, SUPPORTED_LANGUAGES, normalize_language, t
 from services.notion import save_entry
 from services.state_store import PROFILE_SECTION, RULES_SECTION, state_store
 from services.stats import build_audio_stats, format_audio_stats
@@ -64,9 +65,9 @@ MEMORY_PULL_TTL_SECONDS = 60
 # One note covers everything the bot just learned: facts about the author and
 # rules it was taught. Both memories change on their own occasions, so a note
 # carries whichever blocks moved and is never sent empty.
-MEMORY_NOTE_HEADER = "🧠 Memory updated"
-PROFILE_BLOCK_LABEL = "About you"
-RULES_BLOCK_LABEL = "Rules"
+MEMORY_NOTE_HEADER = "memory.updated"
+PROFILE_BLOCK_LABEL = "memory.about"
+RULES_BLOCK_LABEL = "memory.rules"
 
 # Memory is read-modify-written from a roast, a background profile extraction and
 # startup, against both local state and Notion. One lock covers all of it, so
@@ -92,39 +93,31 @@ class PreviewRender:
 # Single source of truth for /help and the Telegram command menu. Keep in sync
 # with the CommandHandler list in main() (guarded by a test).
 COMMANDS: tuple[tuple[str, str], ...] = (
-    ("start", "What I do"),
-    ("help", "Commands and buttons"),
-    ("weekly", "Weekly highlights now"),
-    ("stat", "Saved audio minutes"),
-    ("memory", "Rebuild author profile from all notes"),
-    ("rules", "Behavior rules you taught me"),
+    ("start", "cmd.start"),
+    ("help", "cmd.help"),
+    ("weekly", "cmd.weekly"),
+    ("stat", "cmd.stat"),
+    ("memory", "cmd.memory"),
+    ("rules", "cmd.rules"),
+    ("language", "cmd.language"),
 )
 
-WELCOME_TEXT = """👋 Pizdabol here.
+def _command_lines(language: str) -> str:
+    return "\n".join(f"/{name} — {t(description, language)}" for name, description in COMMANDS)
 
-Send voice or text. I transcribe, add title and tags, show a preview. You edit, press Save, it lands in Notion.
 
-Daily summary at 21:00. /help for the rest."""
+def _help_text(language: str) -> str:
+    return t("help", language, commands=_command_lines(language))
 
-_COMMAND_LINES = "\n".join(f"/{name} — {description}" for name, description in COMMANDS)
 
-HELP_TEXT = f"""*Send*
-Voice or text. I transcribe, title, tag, show preview.
-
-*Preview buttons*
-`✎ Title` `✎ Text` `✎ Tags` — reply with new value
-`✦ Format` — clean up text, `↺ Original` reverts
-`Date` — today or last 6 days
-`Highlight ⭐` — mark as week highlight
-`🔥 Roast` — honest take, reply to keep talking
-`✓ Save` — write to Notion, nothing saved before this
-`Cancel` — drop draft
-
-*Commands*
-{_COMMAND_LINES}
-
-*Automatic*
-Daily summary 21:00. Weekly report Sunday 21:00."""
+def _message_language(message=None, update: Update | None = None) -> str:
+    stored = state_store.get_saved_language()
+    if stored:
+        return stored
+    user = getattr(update, "effective_user", None) if update else None
+    if user is None and message is not None:
+        user = getattr(message, "from_user", None)
+    return normalize_language(getattr(user, "language_code", None))
 
 
 def _tags_html(tags: list[str]) -> str:
@@ -150,14 +143,14 @@ def _normalize_entry_date(entry_date: str | None) -> str:
     return entry_date if entry_date in options else options[0]
 
 
-def _entry_date_label(entry_date: str | None) -> str:
+def _entry_date_label(entry_date: str | None, language: str | None = None) -> str:
     normalized = _normalize_entry_date(entry_date)
     entry_day = date.fromisoformat(normalized)
     today = _local_today()
     if entry_day == today:
-        return f"Today ({normalized})"
+        return t("date.today", language, date=normalized)
     if entry_day == today - timedelta(days=1):
-        return f"Yesterday ({normalized})"
+        return t("date.yesterday", language, date=normalized)
     return normalized
 
 
@@ -166,24 +159,22 @@ def _compose_preview_text(
     escaped_text: str,
     tags: list[str],
     entry_date: str | None = None,
+    language: str | None = None,
 ) -> str:
     parts = [
         f"<b>{escape(title)}</b>",
         escaped_text,
     ]
     if entry_date:
-        parts.append(f"Date: <code>{escape(_entry_date_label(entry_date))}</code>")
+        parts.append(t("preview.date", language, date=escape(_entry_date_label(entry_date, language))))
     parts.append(
         _tags_html(tags),
     )
     return "\n\n".join(parts)
 
 
-def _preview_truncation_notice(page: int, page_count: int) -> str:
-    return (
-        f"\n\n<code>Preview truncated. Page {page + 1}/{page_count}. "
-        "Full text is kept for Save/Edit/Format.</code>"
-    )
+def _preview_truncation_notice(page: int, page_count: int, language: str | None = None) -> str:
+    return t("preview.truncated", language, page=page + 1, page_count=page_count)
 
 
 def _preview_page_candidate(
@@ -195,9 +186,10 @@ def _preview_page_candidate(
     text_length: int,
     page: int,
     page_count: int,
+    language: str | None = None,
 ) -> str:
-    page_text = escape(text[start:start + text_length]) + _preview_truncation_notice(page, page_count)
-    return _compose_preview_text(title, page_text, tags, entry_date)
+    page_text = escape(text[start:start + text_length]) + _preview_truncation_notice(page, page_count, language)
+    return _compose_preview_text(title, page_text, tags, entry_date, language)
 
 
 def _fit_preview_page_length(
@@ -208,13 +200,14 @@ def _fit_preview_page_length(
     start: int,
     page: int,
     page_count: int,
+    language: str | None = None,
 ) -> int:
     low = 0
     high = len(text) - start
     best = -1
     while low <= high:
         mid = (low + high) // 2
-        candidate = _preview_page_candidate(title, text, tags, entry_date, start, mid, page, page_count)
+        candidate = _preview_page_candidate(title, text, tags, entry_date, start, mid, page, page_count, language)
         if len(candidate) <= TELEGRAM_MESSAGE_LIMIT:
             best = mid
             low = mid + 1
@@ -229,6 +222,7 @@ def _preview_page_slices(
     tags: list[str],
     entry_date: str | None,
     page_count_hint: int,
+    language: str | None = None,
 ) -> list[tuple[int, int]]:
     slices = []
     start = 0
@@ -241,6 +235,7 @@ def _preview_page_slices(
             start,
             len(slices),
             page_count_hint,
+            language,
         )
         if text_length <= 0:
             return []
@@ -249,12 +244,13 @@ def _preview_page_slices(
     return slices
 
 
-def _fallback_preview_text(title: str, entry_date: str | None) -> str:
+def _fallback_preview_text(title: str, entry_date: str | None, language: str | None = None) -> str:
     fallback = _compose_preview_text(
         title[:256],
-        "<code>Preview is too long for Telegram. Full text is kept for Save/Edit/Format.</code>",
+        t("preview.fallback", language),
         [],
         entry_date,
+        language,
     )
     return fallback[:TELEGRAM_MESSAGE_LIMIT]
 
@@ -265,18 +261,19 @@ def _render_preview(
     tags: list[str],
     entry_date: str | None = None,
     page: int = 0,
+    language: str | None = None,
 ) -> PreviewRender:
-    preview = _compose_preview_text(title, escape(text), tags, entry_date)
+    preview = _compose_preview_text(title, escape(text), tags, entry_date, language)
     if len(preview) <= TELEGRAM_MESSAGE_LIMIT:
         return PreviewRender(preview)
 
     page_count_hint = 1
     page_slices = []
     for _ in range(10):
-        page_slices = _preview_page_slices(title, text, tags, entry_date, page_count_hint)
+        page_slices = _preview_page_slices(title, text, tags, entry_date, page_count_hint, language)
         if not page_slices:
             return PreviewRender(
-                _fallback_preview_text(title, entry_date),
+                _fallback_preview_text(title, entry_date, language),
                 page=0,
                 page_count=1,
                 truncated=True,
@@ -297,10 +294,11 @@ def _render_preview(
         text_length,
         normalized_page,
         page_count,
+        language,
     )
     if len(page_text) > TELEGRAM_MESSAGE_LIMIT:
         return PreviewRender(
-            _fallback_preview_text(title, entry_date),
+            _fallback_preview_text(title, entry_date, language),
             page=0,
             page_count=1,
             truncated=True,
@@ -314,8 +312,9 @@ def _preview_text(
     tags: list[str],
     entry_date: str | None = None,
     page: int = 0,
+    language: str | None = None,
 ) -> str:
-    return _render_preview(title, text, tags, entry_date, page).text
+    return _render_preview(title, text, tags, entry_date, page, language).text
 
 
 def _preview_msg_id(draft: dict) -> int:
@@ -490,11 +489,12 @@ def _preview_keyboard(
     show_pagination: bool = False,
     preview_page: int = 0,
     page_count: int = 1,
+    language: str | None = None,
 ) -> InlineKeyboardMarkup:
     highlight_btn = (
-        InlineKeyboardButton("⭐ Highlighted", callback_data=f"toggle_highlight:{entry_id}")
+        InlineKeyboardButton(t("button.highlighted", language), callback_data=f"toggle_highlight:{entry_id}")
         if highlighted else
-        InlineKeyboardButton("Mark as Highlight ⭐", callback_data=f"toggle_highlight:{entry_id}")
+        InlineKeyboardButton(t("button.mark_highlight", language), callback_data=f"toggle_highlight:{entry_id}")
     )
     rows = []
     if show_pagination and page_count > 1:
@@ -506,64 +506,64 @@ def _preview_keyboard(
         ])
     rows.append(
         [
-            InlineKeyboardButton("✎ Title", callback_data=f"edit_title:{entry_id}"),
-            InlineKeyboardButton("✎ Text", callback_data=f"edit_text:{entry_id}"),
-            InlineKeyboardButton("✎ Tags", callback_data=f"edit_tags:{entry_id}"),
+            InlineKeyboardButton(t("button.title", language), callback_data=f"edit_title:{entry_id}"),
+            InlineKeyboardButton(t("button.text", language), callback_data=f"edit_text:{entry_id}"),
+            InlineKeyboardButton(t("button.tags", language), callback_data=f"edit_tags:{entry_id}"),
         ],
     )
     if show_format:
-        rows.append([InlineKeyboardButton("✦ Format", callback_data=f"format:{entry_id}")])
+        rows.append([InlineKeyboardButton(t("button.format", language), callback_data=f"format:{entry_id}")])
     elif show_original:
-        rows.append([InlineKeyboardButton("↺ Original", callback_data=f"unformat:{entry_id}")])
-    rows.append([InlineKeyboardButton(f"Date: {_entry_date_label(entry_date)}", callback_data=f"pick_date:{entry_id}")])
+        rows.append([InlineKeyboardButton(t("button.original", language), callback_data=f"unformat:{entry_id}")])
+    rows.append([InlineKeyboardButton(t("button.date", language, date=_entry_date_label(entry_date, language)), callback_data=f"pick_date:{entry_id}")])
     rows.append([highlight_btn])
     if roast.is_configured():
-        rows.append([InlineKeyboardButton("🔥 Roast", callback_data=f"roast:{entry_id}")])
-    rows.append([InlineKeyboardButton("✓ Save", callback_data=f"save:{entry_id}")])
-    rows.append([InlineKeyboardButton("Cancel", callback_data=f"cancel:{entry_id}")])
+        rows.append([InlineKeyboardButton(t("button.roast", language), callback_data=f"roast:{entry_id}")])
+    rows.append([InlineKeyboardButton(t("button.save", language), callback_data=f"save:{entry_id}")])
+    rows.append([InlineKeyboardButton(t("button.cancel", language), callback_data=f"cancel:{entry_id}")])
     return InlineKeyboardMarkup(rows)
 
 
-def _date_picker_keyboard(entry_id: str, selected_date: str | None = None) -> InlineKeyboardMarkup:
+def _date_picker_keyboard(entry_id: str, selected_date: str | None = None, language: str | None = None) -> InlineKeyboardMarkup:
     normalized = _normalize_entry_date(selected_date)
     rows = []
     for entry_date in _entry_date_options():
         prefix = "✓ " if entry_date == normalized else ""
         rows.append([
             InlineKeyboardButton(
-                f"{prefix}{_entry_date_label(entry_date)}",
+                f"{prefix}{_entry_date_label(entry_date, language)}",
                 callback_data=f"set_date:{entry_id}:{entry_date}",
             )
         ])
-    rows.append([InlineKeyboardButton("← Back to preview", callback_data=f"back_to_preview:{entry_id}")])
-    rows.append([InlineKeyboardButton("Cancel draft", callback_data=f"cancel:{entry_id}")])
+    rows.append([InlineKeyboardButton(t("button.back_preview", language), callback_data=f"back_to_preview:{entry_id}")])
+    rows.append([InlineKeyboardButton(t("button.cancel_draft", language), callback_data=f"cancel:{entry_id}")])
     return InlineKeyboardMarkup(rows)
 
 
-def _duplicate_voice_keyboard(message_key: str) -> InlineKeyboardMarkup:
+def _duplicate_voice_keyboard(message_key: str, language: str | None = None) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("Add anyway", callback_data=f"add_duplicate:{message_key}")],
-        [InlineKeyboardButton("Cancel", callback_data=f"cancel_duplicate:{message_key}")],
+        [InlineKeyboardButton(t("button.add_anyway", language), callback_data=f"add_duplicate:{message_key}")],
+        [InlineKeyboardButton(t("button.cancel", language), callback_data=f"cancel_duplicate:{message_key}")],
     ])
 
 
-def _duplicate_save_keyboard(entry_id: str) -> InlineKeyboardMarkup:
+def _duplicate_save_keyboard(entry_id: str, language: str | None = None) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("Add anyway", callback_data=f"save_anyway:{entry_id}")],
-        [InlineKeyboardButton("Cancel", callback_data=f"cancel:{entry_id}")],
+        [InlineKeyboardButton(t("button.add_anyway", language), callback_data=f"save_anyway:{entry_id}")],
+        [InlineKeyboardButton(t("button.cancel", language), callback_data=f"cancel:{entry_id}")],
     ])
 
 
-def _retry_processing_keyboard(message_key: str) -> InlineKeyboardMarkup:
+def _retry_processing_keyboard(message_key: str, language: str | None = None) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("Retry", callback_data=f"retry_process:{message_key}")],
+        [InlineKeyboardButton(t("button.retry", language), callback_data=f"retry_process:{message_key}")],
     ])
 
 
-def _duplicate_warning_text(metadata: dict | None) -> str:
+def _duplicate_warning_text(metadata: dict | None, language: str | None = None) -> str:
     if metadata and metadata.get("source") == "voice":
-        return "This voice message has already been added.\n\nAdd it again anyway?"
-    return "This entry has already been added.\n\nAdd it again anyway?"
+        return t("duplicate.voice", language)
+    return t("duplicate.entry", language)
 
 
 def _draft_highlighted(draft: dict) -> bool:
@@ -584,6 +584,7 @@ def _render_preview_for_draft(draft: dict) -> PreviewRender:
         draft["tags"],
         draft.get("entry_date"),
         _draft_preview_page(draft),
+        draft.get("language"),
     )
 
 
@@ -602,6 +603,7 @@ def _preview_keyboard_for_draft(draft: dict, preview: PreviewRender | None = Non
         show_pagination=preview.truncated,
         preview_page=preview.page,
         page_count=preview.page_count,
+        language=draft.get("language"),
     )
 
 
@@ -761,7 +763,7 @@ async def _sync_memory() -> None:
         _last_memory_pull = monotonic()
 
 
-async def _update_profile_points(diary_text: str, reply_target=None) -> None:
+async def _update_profile_points(diary_text: str, reply_target=None, language: str | None = None) -> None:
     """Best-effort: refresh the persisted author profile from a diary entry.
     Never blocks or breaks the roast flow — failures are logged and swallowed.
 
@@ -770,7 +772,7 @@ async def _update_profile_points(diary_text: str, reply_target=None) -> None:
     await _sync_author_memory()
     existing = state_store.get_profile_points()
     try:
-        points = await roast.extract_profile_points(diary_text, existing)
+        points = await roast.extract_profile_points(diary_text, existing, language=language)
     except Exception:
         logger.exception("Failed to update roast profile points")
         return
@@ -820,7 +822,12 @@ def _render_memory_note(*blocks: tuple[str, list[str]]) -> str | None:
     parts = [f"{label}:\n" + "\n".join(lines) for label, lines in blocks if lines]
     if not parts:
         return None
-    return "\n".join([MEMORY_NOTE_HEADER, *parts])
+    language = state_store.get_language()
+    localized = [
+        f"{t(label, language)}:\n" + "\n".join(lines)
+        for label, lines in blocks if lines
+    ]
+    return "\n".join([t(MEMORY_NOTE_HEADER, language), *localized])
 
 
 async def _send_memory_note(reply_target, *blocks: tuple[str, list[str]]) -> tuple[str | None, list]:
@@ -863,15 +870,16 @@ async def _persist_rules_ops(
 
 
 async def _run_roast(reply_target, chain: list[dict], context, status_message=None) -> None:
+    language = _message_language(reply_target)
     # Hand edits in Notion outrank stored memory, so pull before reading it.
     await _sync_memory()
     points = state_store.get_profile_points()
     rules = state_store.get_rules()
     try:
-        reply = await roast.roast(chain, points=points, rules=rules)
+        reply = await roast.roast(chain, points=points, rules=rules, language=language)
     except Exception as e:
         logger.exception("Error generating roast")
-        error_text = f"Roast failed: {e}"
+        error_text = t("roast.failed", language, error=e)
         if status_message is not None:
             await _edit_reply_message(context, status_message, error_text)
         else:
@@ -886,16 +894,17 @@ async def _run_roast(reply_target, chain: list[dict], context, status_message=No
 
 
 async def _roast_draft(query, context: ContextTypes.DEFAULT_TYPE, draft: dict) -> None:
+    language = draft.get("language")
     if not roast.is_configured():
-        await query.message.reply_text("🔥 Roast is unavailable: set ANTHROPIC_API_KEY in .env.")
+        await query.message.reply_text(t("roast.unavailable", language))
         return
 
     text = (draft.get("text") or "").strip()
     if not text:
-        await query.message.reply_text("Nothing to roast — the text is empty.")
+        await query.message.reply_text(t("roast.empty", language))
         return
 
-    status = await _reply_to_source(query.message, "🔥 Roasting...")
+    status = await _reply_to_source(query.message, t("roast.status", language))
     chain = [{"role": "user", "content": text}]
     await _run_roast(query.message, chain, context, status_message=status)
 
@@ -908,7 +917,7 @@ async def _handle_roast_followup(update: Update, context: ContextTypes.DEFAULT_T
         return
 
     new_chain = list(chain) + [{"role": "user", "content": reply_text}]
-    status = await _reply_to_source(user_msg, "🔥 Thinking...")
+    status = await _reply_to_source(user_msg, t("roast.thinking", _message_language(user_msg)))
     await _run_roast(user_msg, new_chain, context, status_message=status)
 
 
@@ -919,19 +928,20 @@ async def _handle_roast_voice_followup(
 ) -> None:
     """Continue a roast conversation from a voice reply: transcribe first, then roast."""
     user_msg = update.effective_message
-    status = await _reply_to_source(user_msg, "Transcribing...")
+    language = _message_language(user_msg)
+    status = await _reply_to_source(user_msg, t("transcribing", language))
     try:
         reply_text = await _transcribe_voice_file(context, user_msg.voice.file_id)
     except Exception as e:
         logger.exception("Error transcribing roast follow-up voice message")
-        await _edit_reply_message(context, status, f"Error: {e}")
+        await _edit_reply_message(context, status, t("error", language, error=e))
         return
 
     if not reply_text:
         await _edit_reply_message(
             context,
             status,
-            f"{settings.openai_transcription_model} did not recognize any speech in this message.",
+            t("speech.empty", language, model=settings.openai_transcription_model),
         )
         return
 
@@ -941,13 +951,18 @@ async def _handle_roast_voice_followup(
         reply_text,
     )
     new_chain = list(chain) + [{"role": "user", "content": reply_text}]
-    await _edit_reply_message(context, status, "🔥 Thinking...")
+    await _edit_reply_message(context, status, t("roast.thinking", language))
     await _run_roast(user_msg, new_chain, context, status_message=status)
 
 
 async def post_init(application: Application) -> None:
+    for language in SUPPORTED_LANGUAGES:
+        await application.bot.set_my_commands(
+            [BotCommand(name, t(description, language)) for name, description in COMMANDS],
+            language_code=language,
+        )
     await application.bot.set_my_commands(
-        [BotCommand(name, description) for name, description in COMMANDS]
+        [BotCommand(name, t(description)) for name, description in COMMANDS]
     )
     try:
         await notion_memory.ensure_memory_pages()
@@ -981,13 +996,14 @@ async def replay_unprocessed_messages(application: Application) -> None:
 
 
 async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    language = _message_language(update=update)
     payload = context.args[0] if getattr(context, "args", None) else None
     source = _parse_source_deeplink_payload(payload)
     if source:
         await _send_source_jump(update, context, *source)
         return
 
-    await update.effective_message.reply_text(WELCOME_TEXT)
+    await update.effective_message.reply_text(t("welcome", language))
 
 
 async def _send_source_jump(
@@ -999,7 +1015,7 @@ async def _send_source_jump(
     try:
         await context.bot.send_message(
             chat_id=chat_id,
-            text="Source message",
+            text=t("source.message", _message_language(update=update)),
             reply_parameters=ReplyParameters(
                 message_id=message_id,
                 allow_sending_without_reply=False,
@@ -1008,12 +1024,51 @@ async def _send_source_jump(
     except Exception:
         logger.exception("Error opening source message")
         await update.effective_message.reply_text(
-            "I couldn't open that source message. It may have been deleted or is no longer available."
+            t("source.failed", _message_language(update=update))
         )
 
 
 async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.effective_message.reply_text(HELP_TEXT, parse_mode="Markdown")
+    await update.effective_message.reply_text(_help_text(_message_language(update=update)), parse_mode="Markdown")
+
+
+def _language_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton(LANGUAGE_NAMES[language], callback_data=f"language:{language}")
+            for language in SUPPORTED_LANGUAGES
+        ]
+    ])
+
+
+async def _set_chat_commands(context: ContextTypes.DEFAULT_TYPE, chat_id: int, language: str) -> None:
+    await context.bot.set_my_commands(
+        [BotCommand(name, t(description, language)) for name, description in COMMANDS],
+        scope=BotCommandScopeChat(chat_id),
+    )
+
+
+async def handle_language(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    language = _message_language(update=update)
+    await update.effective_message.reply_text(
+        "\n".join([
+            t("language.current", language, language_name=LANGUAGE_NAMES[language]),
+            t("language.choose", language),
+        ]),
+        reply_markup=_language_keyboard(),
+    )
+
+
+async def language_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    _, language = (query.data or "").split(":", 1)
+    if language not in SUPPORTED_LANGUAGES:
+        await query.edit_message_text(t("language.invalid", _message_language(update=update)))
+        return
+    state_store.set_language(language)
+    await _set_chat_commands(context, query.message.chat_id, language)
+    await query.edit_message_text(t("language.changed", language, language_name=LANGUAGE_NAMES[language]))
 
 
 async def handle_rules(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1021,13 +1076,14 @@ async def handle_rules(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     the bot how to act, or to forget a rule, and it rewrites the list itself.
     Rules typed straight into the Notion page count too — they are pulled first."""
     await _sync_bot_memory()
+    language = _message_language(update=update)
     rules = state_store.get_rules()
     if not rules:
         await update.effective_message.reply_text(
-            "🧠 No rules yet. Tell me in a roast reply how to behave — I'll remember it."
+            t("rules.empty", language)
         )
         return
-    lines = ["🧠 Rules"] + [
+    lines = [t("rules.header", language)] + [
         f"{index}. {rule}" for index, rule in enumerate(memory.texts(rules), 1)
     ]
     await update.effective_message.reply_text("\n".join(lines))
@@ -1049,6 +1105,7 @@ async def _transcribe_voice_file(context: ContextTypes.DEFAULT_TYPE, file_id: st
 
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.effective_message
+    language = _message_language(message, update)
     roast_chain = _replied_roast_chain(message)
     if roast_chain is not None:
         await _handle_roast_voice_followup(update, context, roast_chain)
@@ -1074,6 +1131,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         duration=duration,
         file_size=file_size,
         source_message_url=_telegram_message_url(message, _bot_username(context)),
+        language=language,
     )
     duplicate = state_store.find_duplicate_voice(
         file_unique_id,
@@ -1085,8 +1143,8 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         state_store.mark_message_duplicate_pending(message_key, duplicate["key"])
         await _reply_to_source(
             message,
-            "This voice message has already been added.\n\nAdd it again anyway?",
-            reply_markup=_duplicate_voice_keyboard(message_key),
+            t("duplicate.voice", language),
+            reply_markup=_duplicate_voice_keyboard(message_key, language),
         )
         return
 
@@ -1098,12 +1156,14 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.effective_message
+    language = _message_language(message, update)
     message_key = state_store.record_text(
         chat_id=message.chat_id,
         message_id=message.message_id,
         text=message.text,
         date=_message_date(message),
         source_message_url=_telegram_message_url(message, _bot_username(context)),
+        language=language,
     )
     context.application.create_task(
         _process_message_record(message_key, message, context),
@@ -1135,13 +1195,14 @@ async def _process_voice_record(
     status_message=None,
 ) -> None:
     status_msg = status_message
+    language = record.get("language")
     try:
         if status_msg:
-            await _edit_reply_message(context, status_msg, "Listening...")
+            await _edit_reply_message(context, status_msg, t("listening", language))
         else:
-            status_msg = await _reply_to_source(message_ref, "Listening...")
+            status_msg = await _reply_to_source(message_ref, t("listening", language))
 
-        await _edit_reply_message(context, status_msg, "Transcribing...")
+        await _edit_reply_message(context, status_msg, t("transcribing", language))
         transcription = await _transcribe_voice_file(context, record["file_id"])
         logger.info(
             "Transcription with %s: %s",
@@ -1156,8 +1217,8 @@ async def _process_voice_record(
             await _edit_reply_message(
                 context,
                 status_msg,
-                f"{settings.openai_transcription_model} did not recognize any speech in this message.",
-                reply_markup=_retry_processing_keyboard(record["key"]),
+                t("speech.empty", language, model=settings.openai_transcription_model),
+                reply_markup=_retry_processing_keyboard(record["key"], language),
             )
             return
 
@@ -1167,6 +1228,7 @@ async def _process_voice_record(
             transcription,
             message_key=record["key"],
             preview_message=status_msg,
+            language=language,
         )
 
     except Exception as e:
@@ -1176,14 +1238,14 @@ async def _process_voice_record(
             await _edit_reply_message(
                 context,
                 status_msg,
-                f"Error: {e}",
-                reply_markup=_retry_processing_keyboard(record["key"]),
+                t("error", language, error=e),
+                reply_markup=_retry_processing_keyboard(record["key"], language),
             )
         else:
             await _reply_to_source(
                 message_ref,
-                f"Error: {e}",
-                reply_markup=_retry_processing_keyboard(record["key"]),
+                t("error", language, error=e),
+                reply_markup=_retry_processing_keyboard(record["key"], language),
             )
 
 
@@ -1194,17 +1256,19 @@ async def _process_text_record(
     status_message=None,
 ) -> None:
     status_msg = status_message
+    language = record.get("language")
     try:
         if status_msg:
-            await _edit_reply_message(context, status_msg, "Preparing preview...")
+            await _edit_reply_message(context, status_msg, t("preparing", language))
         else:
-            status_msg = await _reply_to_source(message_ref, "Preparing preview...")
+            status_msg = await _reply_to_source(message_ref, t("preparing", language))
         await _create_preview(
             message_ref,
             context,
             record["text"],
             message_key=record["key"],
             preview_message=status_msg,
+            language=language,
         )
     except Exception as e:
         logger.exception("Error processing text message")
@@ -1213,14 +1277,14 @@ async def _process_text_record(
             await _edit_reply_message(
                 context,
                 status_msg,
-                f"Error: {e}",
-                reply_markup=_retry_processing_keyboard(record["key"]),
+                t("error", language, error=e),
+                reply_markup=_retry_processing_keyboard(record["key"], language),
             )
         else:
             await _reply_to_source(
                 message_ref,
-                f"Error: {e}",
-                reply_markup=_retry_processing_keyboard(record["key"]),
+                t("error", language, error=e),
+                reply_markup=_retry_processing_keyboard(record["key"], language),
             )
 
 
@@ -1230,14 +1294,16 @@ async def _create_preview(
     source_text: str,
     message_key: str | None = None,
     preview_message=None,
+    language: str | None = None,
 ) -> None:
     entry_id = _new_entry_id()
     entry_date = _default_entry_date()
     record = state_store.get_message(message_key) if message_key else None
-    title, formatted_text, tags = await format_entry(source_text)
+    language = normalize_language(language)
+    title, formatted_text, tags = await format_entry(source_text, language)
     text = source_text
 
-    preview = _render_preview(title, text, tags, entry_date)
+    preview = _render_preview(title, text, tags, entry_date, language=language)
     keyboard = _preview_keyboard(
         entry_id,
         highlighted=False,
@@ -1246,6 +1312,7 @@ async def _create_preview(
         show_pagination=preview.truncated,
         preview_page=preview.page,
         page_count=preview.page_count,
+        language=language,
     )
     if preview_message:
         preview_msg = preview_message
@@ -1274,6 +1341,7 @@ async def _create_preview(
         "formatted": False,
         "entry_date": entry_date,
         "metadata": _entry_metadata(record, source_text, bot_username=_bot_username(context)),
+        "language": language,
         "allow_duplicate": bool(record and record.get("allow_duplicate")),
         "chat_id": message.chat_id,
         "preview_msg_id": preview_msg.message_id,
@@ -1285,7 +1353,7 @@ async def _create_preview(
     if message_key:
         state_store.mark_message_drafted(message_key, entry_id)
     if source_text and source_text.strip():
-        context.application.create_task(_update_profile_points(source_text, preview_msg))
+        context.application.create_task(_update_profile_points(source_text, preview_msg, language))
 
 
 def _callback_payload(update: Update) -> tuple[str, str] | tuple[None, None]:
@@ -1310,12 +1378,13 @@ async def entry_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     action, entry_id = _callback_payload(update)
     draft = _get_draft(context, entry_id)
+    language = draft.get("language") if draft else _message_language(update=update)
     if not action or not draft:
-        await query.message.reply_text("This draft is no longer available.")
+        await query.message.reply_text(t("draft.gone", language))
         return
 
     if draft.get("saving") and action != "save":
-        await query.message.reply_text("This draft is already saving.")
+        await query.message.reply_text(t("draft.saving", language))
         return
 
     if action == "save":
@@ -1343,7 +1412,7 @@ async def entry_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     elif action == "set_date":
         await _set_entry_date(update, context, draft)
     elif action in {"edit_title", "edit_text", "edit_tags"}:
-        await _request_edit(query, context, entry_id, action.removeprefix("edit_"))
+        await _request_edit(query, context, entry_id, action.removeprefix("edit_"), language)
 
 
 async def duplicate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1352,25 +1421,26 @@ async def duplicate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     data = query.data or ""
     if ":" not in data:
-        await query.message.reply_text("This voice message is no longer available.")
+        await query.message.reply_text(t("voice.gone", _message_language(update=update)))
         return
 
     action, message_key = data.split(":", 1)
     record = state_store.get_message(message_key)
+    language = record.get("language") if record else _message_language(update=update)
     if not record or record.get("kind") != "voice":
-        await query.edit_message_text("This voice message is no longer available.")
+        await query.edit_message_text(t("voice.gone", language))
         return
 
     if action == "cancel_duplicate":
         state_store.mark_message_cancelled(message_key)
-        await query.edit_message_text("Cancelled.")
+        await query.edit_message_text(t("cancelled", language))
         return
 
     if action != "add_duplicate":
         return
 
     state_store.mark_message_duplicate_confirmed(message_key)
-    await query.edit_message_text("Adding this voice message anyway...")
+    await query.edit_message_text(t("adding_anyway", language))
     message_ref = StoredMessageRef(
         context.bot,
         chat_id=record["chat_id"],
@@ -1388,16 +1458,17 @@ async def retry_processing_callback(update: Update, context: ContextTypes.DEFAUL
 
     data = query.data or ""
     if ":" not in data:
-        await query.message.reply_text("This message is no longer available.")
+        await query.message.reply_text(t("message.gone", _message_language(update=update)))
         return
 
     _, message_key = data.split(":", 1)
     record = state_store.get_message(message_key)
+    language = record.get("language") if record else _message_language(update=update)
     if not record or record.get("status") in {"drafted", "saved", "cancelled"}:
-        await query.edit_message_text("This message is no longer available.")
+        await query.edit_message_text(t("message.gone", language))
         return
     if record.get("status") == "processing":
-        await query.message.reply_text("This message is already processing.")
+        await query.message.reply_text(t("processing", language))
         return
 
     message_ref = StoredMessageRef(
@@ -1405,7 +1476,7 @@ async def retry_processing_callback(update: Update, context: ContextTypes.DEFAUL
         chat_id=record["chat_id"],
         message_id=record["message_id"],
     )
-    await query.edit_message_text("Retrying...")
+    await query.edit_message_text(t("retrying", language))
     context.application.create_task(
         _process_message_record(message_key, message_ref, context, status_message=query.message),
         update=update,
@@ -1446,10 +1517,11 @@ async def _save_draft(query, context: ContextTypes.DEFAULT_TYPE, entry_id: str, 
         return
 
     draft["saving"] = True
+    language = draft.get("language")
     draft["entry_date"] = _normalize_entry_date(draft.get("entry_date"))
     metadata = _draft_metadata_for_save(draft, context)
     try:
-        await query.edit_message_text("Saving to Notion...")
+        await query.edit_message_text(t("saving", language))
         result = await save_entry(
             draft["title"],
             draft["text"],
@@ -1459,13 +1531,13 @@ async def _save_draft(query, context: ContextTypes.DEFAULT_TYPE, entry_id: str, 
             allow_duplicate=draft.get("allow_duplicate", False),
         )
         if result.created:
-            await query.edit_message_text("✓ Saved to Notion and verified")
+            await query.edit_message_text(t("saved", language))
         else:
             draft["saving"] = False
             state_store.save_draft(draft)
             await query.edit_message_text(
-                _duplicate_warning_text(draft.get("metadata")),
-                reply_markup=_duplicate_save_keyboard(entry_id),
+                _duplicate_warning_text(draft.get("metadata"), language),
+                reply_markup=_duplicate_save_keyboard(entry_id, language),
             )
             return
     except Exception as e:
@@ -1473,7 +1545,7 @@ async def _save_draft(query, context: ContextTypes.DEFAULT_TYPE, entry_id: str, 
         draft["saving"] = False
         state_store.save_draft(draft)
         await query.edit_message_text(
-            f"Not saved to Notion: {e}\nDraft kept. Press Save to retry or Cancel to discard.",
+            t("not_saved", language, error=e),
             reply_markup=_preview_keyboard_for_draft(draft),
         )
         return
@@ -1485,12 +1557,12 @@ async def _save_draft(query, context: ContextTypes.DEFAULT_TYPE, entry_id: str, 
 
 async def _format_draft(query, context: ContextTypes.DEFAULT_TYPE, draft: dict) -> None:
     if draft.get("formatted"):
-        await query.message.reply_text("This draft is already formatted.")
+        await query.message.reply_text(t("formatted_already", draft.get("language")))
         return
 
     formatted_text = draft.get("formatted_text")
     if not formatted_text:
-        await query.message.reply_text("Formatted text is no longer available.")
+        await query.message.reply_text(t("formatted_missing", draft.get("language")))
         return
 
     draft["text"] = formatted_text
@@ -1502,12 +1574,12 @@ async def _format_draft(query, context: ContextTypes.DEFAULT_TYPE, draft: dict) 
 
 async def _unformat_draft(query, context: ContextTypes.DEFAULT_TYPE, draft: dict) -> None:
     if not draft.get("formatted"):
-        await query.message.reply_text("This draft already shows the original text.")
+        await query.message.reply_text(t("original_already", draft.get("language")))
         return
 
     raw_text = draft.get("raw_text")
     if raw_text is None:
-        await query.message.reply_text("Original text is no longer available.")
+        await query.message.reply_text(t("original_missing", draft.get("language")))
         return
 
     draft["text"] = raw_text
@@ -1521,7 +1593,7 @@ async def _cancel_draft(query, context: ContextTypes.DEFAULT_TYPE, entry_id: str
     _drafts(context).pop(entry_id, None)
     state_store.mark_message_cancelled(draft.get("message_key"))
     state_store.remove_draft(entry_id)
-    await query.edit_message_text("Cancelled.")
+    await query.edit_message_text(t("cancelled", draft.get("language")))
 
 
 async def _toggle_highlight(context: ContextTypes.DEFAULT_TYPE, draft: dict) -> None:
@@ -1564,19 +1636,16 @@ async def _set_preview_page(update: Update, context: ContextTypes.DEFAULT_TYPE, 
 async def _show_date_picker(query, draft: dict) -> None:
     draft["entry_date"] = _normalize_entry_date(draft.get("entry_date"))
     await query.edit_message_text(
-        text=(
-            "Choose note date from the last 7 days.\n\n"
-            f"Current: <code>{escape(_entry_date_label(draft['entry_date']))}</code>"
-        ),
+        text=t("date.choose", draft.get("language"), date=escape(_entry_date_label(draft["entry_date"], draft.get("language")))),
         parse_mode="HTML",
-        reply_markup=_date_picker_keyboard(draft["id"], draft["entry_date"]),
+        reply_markup=_date_picker_keyboard(draft["id"], draft["entry_date"], draft.get("language")),
     )
 
 
 async def _set_entry_date(update: Update, context: ContextTypes.DEFAULT_TYPE, draft: dict) -> None:
     entry_date = _callback_value(update)
     if entry_date not in _entry_date_options():
-        await update.callback_query.message.reply_text("This date is no longer available. Choose from the menu again.")
+        await update.callback_query.message.reply_text(t("date.gone", draft.get("language")))
         await _show_date_picker(update.callback_query, draft)
         return
 
@@ -1585,11 +1654,11 @@ async def _set_entry_date(update: Update, context: ContextTypes.DEFAULT_TYPE, dr
     await _edit_preview(context, draft)
 
 
-async def _request_edit(query, context: ContextTypes.DEFAULT_TYPE, entry_id: str, field: str) -> None:
+async def _request_edit(query, context: ContextTypes.DEFAULT_TYPE, entry_id: str, field: str, language: str | None = None) -> None:
     labels = {
-        "title": "Send a new title:",
-        "text": "Send a new text:",
-        "tags": "Send tags separated by commas:",
+        "title": t("edit.title", language),
+        "text": t("edit.text", language),
+        "tags": t("edit.tags", language),
     }
     prompt = await query.message.reply_text(
         labels[field],
@@ -1624,7 +1693,7 @@ async def receive_edit_reply(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     draft = _get_draft(context, prompt["entry_id"])
     if not draft:
-        await user_msg.reply_text("This draft is no longer available.")
+        await user_msg.reply_text(t("draft.gone", _message_language(user_msg, update)))
         return
 
     field = prompt["field"]
@@ -1653,92 +1722,81 @@ async def receive_edit_reply(update: Update, context: ContextTypes.DEFAULT_TYPE)
 # be parsed as Markdown or HTML.
 
 
-def _memory_stored_line(stored: int) -> str:
+def _memory_stored_line(stored: int, language: str | None = None) -> str:
     if stored:
-        return f"Stored now: {stored} fact(s) — kept as the starting point and corrected along the way."
-    return "Nothing is stored yet — the profile will be built from scratch."
+        return t("memory.stored", language, count=stored)
+    return t("memory.empty_stored", language)
 
 
-def _memory_intro_text(stored: int) -> str:
-    return "\n".join([
-        "🧠 Long-term memory rebuild",
-        "",
-        "I'll walk through every saved note in Notion, oldest first, and rebuild the "
-        "author profile note by note — one AI request per note, same as when you send a new one.",
-        "",
-        _memory_stored_line(stored),
-        "",
-        "Reply with the focus points for this pass: what matters most, what to keep, what to drop.",
-        "Send - to rebuild without extra focus.",
-    ])
+def _memory_intro_text(stored: int, language: str | None = None) -> str:
+    return t("memory.intro", language, stored=_memory_stored_line(stored, language))
 
 
-def _memory_focus_line(focus: str) -> str:
-    return f"Focus: {focus}" if focus else "Focus: none"
+def _memory_focus_line(focus: str, language: str | None = None) -> str:
+    return t("memory.focus", language, focus=focus) if focus else t("memory.no_focus", language)
 
 
-def _memory_confirm_text(focus: str, stored: int) -> str:
-    return "\n".join([
-        "🧠 Ready to rebuild long-term memory",
-        "",
-        _memory_focus_line(focus),
-        _memory_stored_line(stored),
-        "",
-        "Every note costs one AI request, so a full pass takes a while. Progress is saved as it goes.",
-    ])
+def _memory_confirm_text(focus: str, stored: int, language: str | None = None) -> str:
+    return t(
+        "memory.confirm",
+        language,
+        focus=_memory_focus_line(focus, language),
+        stored=_memory_stored_line(stored, language),
+    )
 
 
-def _memory_progress_text(progress, focus: str) -> str:
-    return "\n".join([
-        "🧠 Rebuilding long-term memory...",
-        "",
-        profile_rebuild.render_progress_bar(progress.handled, progress.total),
-        f"Facts: {len(progress.points)}",
-        _memory_focus_line(focus),
-    ])
+def _memory_progress_text(progress, focus: str, language: str | None = None) -> str:
+    return t(
+        "memory.progress",
+        language,
+        bar=profile_rebuild.render_progress_bar(progress.handled, progress.total),
+        facts=len(progress.points),
+        focus=_memory_focus_line(focus, language),
+    )
 
 
-def _memory_result_text(progress, before: int, focus: str) -> str:
+def _memory_result_text(progress, before: int, focus: str, language: str | None = None) -> str:
     if not progress.total:
-        return "🧠 No saved notes found in Notion — nothing to rebuild from."
+        return t("memory.no_notes", language)
 
     lines = [
-        "⚠️ Long-term memory rebuild stopped early" if progress.aborted_reason
-        else "✅ Long-term memory rebuilt",
+        t("memory.stopped", language) if progress.aborted_reason
+        else t("memory.done", language),
         "",
         profile_rebuild.render_progress_bar(progress.handled, progress.total),
-        f"Notes read: {progress.processed}",
+        t("memory.notes_read", language, count=progress.processed),
     ]
     if progress.skipped:
-        lines.append(f"Empty notes skipped: {progress.skipped}")
+        lines.append(t("memory.empty_skipped", language, count=progress.skipped))
     if progress.failed:
-        lines.append(f"Notes failed: {progress.failed}")
-    lines.append(f"Facts: {before} → {len(progress.points)}")
-    lines.append(_memory_focus_line(focus))
+        lines.append(t("memory.failed_count", language, count=progress.failed))
+    lines.append(t("memory.facts", language, before=before, after=len(progress.points)))
+    lines.append(_memory_focus_line(focus, language))
     if progress.aborted_reason:
-        lines += ["", f"Reason: {progress.aborted_reason}", "Everything processed so far is saved."]
+        lines += ["", t("memory.reason", language, reason=progress.aborted_reason), t("memory.saved_so_far", language)]
     return "\n".join(lines)
 
 
-def _memory_keyboard(request_id: str) -> InlineKeyboardMarkup:
+def _memory_keyboard(request_id: str, language: str | None = None) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[
-        InlineKeyboardButton("✓ Confirm", callback_data=f"memory_confirm:{request_id}"),
-        InlineKeyboardButton("✗ Cancel", callback_data=f"memory_cancel:{request_id}"),
+        InlineKeyboardButton(t("button.confirm", language), callback_data=f"memory_confirm:{request_id}"),
+        InlineKeyboardButton(t("button.cancel", language), callback_data=f"memory_cancel:{request_id}"),
     ]])
 
 
 async def handle_memory(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Step 1: ask for the focus points that should steer this rebuild."""
     message = update.effective_message
+    language = _message_language(message, update)
     if not roast.is_configured():
-        await message.reply_text("AI provider API key is not configured.")
+        await message.reply_text(t("memory.api_missing", language))
         return
     if profile_rebuild.is_running():
-        await message.reply_text("A memory rebuild is already running. Wait for it to finish.")
+        await message.reply_text(t("memory.running", language))
         return
 
     prompt = await message.reply_text(
-        _memory_intro_text(len(state_store.get_profile_points())),
+        _memory_intro_text(len(state_store.get_profile_points()), language),
         reply_markup=ForceReply(selective=True),
     )
     _memory_prompts(context)[_prompt_key(_message_chat_id(message), prompt.message_id)] = True
@@ -1755,34 +1813,35 @@ async def _receive_memory_focus(
         focus = ""
 
     request_id = _new_entry_id()
-    _memory_requests(context)[request_id] = {"focus": focus}
+    language = _message_language(update.effective_message, update)
+    _memory_requests(context)[request_id] = {"focus": focus, "language": language}
     await update.effective_message.reply_text(
-        _memory_confirm_text(focus, len(state_store.get_profile_points())),
-        reply_markup=_memory_keyboard(request_id),
+        _memory_confirm_text(focus, len(state_store.get_profile_points()), language),
+        reply_markup=_memory_keyboard(request_id, language),
     )
 
 
 async def _receive_memory_focus_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """A voice reply to the focus prompt is transcribed into focus, never saved as a note."""
     message = update.effective_message
-    status = await _reply_to_source(message, "Transcribing...")
+    language = _message_language(message, update)
+    status = await _reply_to_source(message, t("transcribing", language))
     try:
         focus_text = await _transcribe_voice_file(context, message.voice.file_id)
     except Exception as e:
         logger.exception("Error transcribing memory focus voice message")
-        await _edit_reply_message(context, status, f"Error: {e}\n\nRun /memory again to retry.")
+        await _edit_reply_message(context, status, t("memory.voice_retry", language, error=e))
         return
 
     if not focus_text:
         await _edit_reply_message(
             context,
             status,
-            f"{settings.openai_transcription_model} did not recognize any speech. "
-            "Run /memory again to retry.",
+            t("memory.no_speech_retry", language, model=settings.openai_transcription_model),
         )
         return
 
-    await _edit_reply_message(context, status, f"Focus: {focus_text}")
+    await _edit_reply_message(context, status, t("memory.focus", language, focus=focus_text))
     await _receive_memory_focus(update, context, focus_text)
 
 
@@ -1797,22 +1856,23 @@ async def memory_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     action, request_id = data.split(":", 1)
 
     request = _memory_requests(context).pop(request_id, None)
+    language = (request or {}).get("language") or _message_language(update=update)
     if request is None:
-        await query.edit_message_text("This memory rebuild request is no longer available.")
+        await query.edit_message_text(t("memory.request_gone", language))
         return
 
     if action == "memory_cancel":
-        await query.edit_message_text("Memory rebuild cancelled.")
+        await query.edit_message_text(t("memory.cancelled", language))
         return
 
     if profile_rebuild.is_running():
-        await query.edit_message_text("A memory rebuild is already running. Wait for it to finish.")
+        await query.edit_message_text(t("memory.running", language))
         return
 
     focus = request.get("focus") or ""
-    await query.edit_message_text("🧠 Starting the long-term memory rebuild...")
+    await query.edit_message_text(t("memory.starting", language))
     context.application.create_task(
-        _run_memory_rebuild(context, query.message, focus),
+        _run_memory_rebuild(context, query.message, focus, language),
         update=update,
     )
 
@@ -1821,6 +1881,7 @@ async def _run_memory_rebuild(
     context: ContextTypes.DEFAULT_TYPE,
     status_message,
     focus: str,
+    language: str | None = None,
 ) -> None:
     """Drive the sequential rebuild: persist points after every note so an abort or
     a restart never loses the pass, and refresh the progress message on a throttle."""
@@ -1833,7 +1894,7 @@ async def _run_memory_rebuild(
         state_store.set_profile_points(progress.points)
         if progress.handled % MEMORY_PROGRESS_EVERY:
             return
-        text = _memory_progress_text(progress, focus)
+        text = _memory_progress_text(progress, focus, language)
         if text == last_rendered:
             return
         last_rendered = text
@@ -1841,17 +1902,15 @@ async def _run_memory_rebuild(
             await _edit_reply_message(context, status_message, text)
 
     try:
-        result = await profile_rebuild.rebuild_profile(focus or None, before, on_progress)
+        result = await profile_rebuild.rebuild_profile(focus or None, before, on_progress, language=language)
     except profile_rebuild.RebuildAlreadyRunning:
         with suppress(Exception):
-            await _edit_reply_message(
-                context, status_message, "A memory rebuild is already running."
-            )
+            await _edit_reply_message(context, status_message, t("memory.running", language))
         return
     except Exception as e:
         logger.exception("Memory rebuild failed")
         with suppress(Exception):
-            await _edit_reply_message(context, status_message, f"Memory rebuild failed: {e}")
+            await _edit_reply_message(context, status_message, t("memory.failed", language, error=e))
         return
 
     # One sync for the whole pass, not one per note.
@@ -1861,53 +1920,56 @@ async def _run_memory_rebuild(
         await _edit_reply_message(
             context,
             status_message,
-            _memory_result_text(result, len(before), focus),
+            _memory_result_text(result, len(before), focus, language),
         )
 
 
 async def handle_weekly(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.effective_message.reply_text("Generating weekly report...")
+    language = _message_language(update=update)
+    await update.effective_message.reply_text(t("weekly.generating", language))
     try:
-        report = await generate_weekly_report()
+        report = await generate_weekly_report(language)
         if report:
             await update.effective_message.reply_text(
-                f"*Weekly highlights*\n\n{report}",
+                f"{t('weekly.header', language)}\n\n{report}",
                 parse_mode="Markdown",
             )
         else:
-            await update.effective_message.reply_text("No entries this week.")
+            await update.effective_message.reply_text(t("weekly.empty", language))
     except Exception:
         logger.exception("Error generating weekly report")
-        await update.effective_message.reply_text("Error generating weekly report.")
+        await update.effective_message.reply_text(t("weekly.error", language))
 
 
 async def handle_stat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.effective_message.reply_text("Counting saved audio stats...")
+    language = _message_language(update=update)
+    await update.effective_message.reply_text(t("stat.counting", language))
     try:
-        stats = await build_audio_stats()
+        stats = await build_audio_stats(language=language)
         await update.effective_message.reply_text(
-            format_audio_stats(stats),
+            format_audio_stats(stats, language),
             parse_mode="Markdown",
         )
     except Exception:
         logger.exception("Error generating audio stats")
-        await update.effective_message.reply_text("Error generating audio stats.")
+        await update.effective_message.reply_text(t("stat.error", language))
 
 
 async def send_weekly_report(context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.info("Generating weekly report...")
+    language = state_store.get_language()
     try:
-        report = await generate_weekly_report()
+        report = await generate_weekly_report(language)
         if report:
             await context.bot.send_message(
                 chat_id=settings.allowed_user_id,
-                text=f"*Weekly highlights*\n\n{report}",
+                text=f"{t('weekly.header', language)}\n\n{report}",
                 parse_mode="Markdown",
             )
         else:
             await context.bot.send_message(
                 chat_id=settings.allowed_user_id,
-                text="No entries this week — next week is a fresh start!",
+                text=t("weekly.empty_push", language),
             )
     except Exception:
         logger.exception("Error generating weekly report")
@@ -1915,18 +1977,19 @@ async def send_weekly_report(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def send_daily_summary(context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.info("Generating daily summary...")
+    language = state_store.get_language()
     try:
-        summary = await generate_daily_summary()
+        summary = await generate_daily_summary(language)
         if summary:
             await context.bot.send_message(
                 chat_id=settings.allowed_user_id,
-                text=f"*Daily summary*\n\n{summary}",
+                text=f"{t('daily.header', language)}\n\n{summary}",
                 parse_mode="Markdown",
             )
         else:
             await context.bot.send_message(
                 chat_id=settings.allowed_user_id,
-                text="Hey, how was your day? I'm sure you have something to be proud of!",
+                text=t("daily.empty_push", language),
             )
     except Exception:
         logger.exception("Error generating daily summary")
@@ -1951,6 +2014,7 @@ def main() -> None:
         CommandHandler("stat", handle_stat, filters=user_filter),
         CommandHandler("memory", handle_memory, filters=user_filter),
         CommandHandler("rules", handle_rules, filters=user_filter),
+        CommandHandler("language", handle_language, filters=user_filter),
     ]
 
     for handler in command_handlers:
@@ -1974,6 +2038,12 @@ def main() -> None:
         CallbackQueryHandler(
             memory_callback,
             pattern="^memory_(confirm|cancel):",
+        )
+    )
+    app.add_handler(
+        CallbackQueryHandler(
+            language_callback,
+            pattern="^language:",
         )
     )
     app.add_handler(

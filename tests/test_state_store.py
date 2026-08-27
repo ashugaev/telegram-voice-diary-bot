@@ -115,6 +115,18 @@ class StateStoreTests(unittest.TestCase):
             # A profile stored as plain strings gets ids on read, nothing is lost.
             self.assertEqual(store.get_profile_points(), [memory.MemoryItem("1", "old")])
 
+    def test_language_persists_and_legacy_state_has_no_saved_language(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "state.json"
+            path.write_text(json.dumps({"version": 1, "messages": {}, "drafts": {}}), encoding="utf-8")
+            store = StateStore(path)
+
+            self.assertIsNone(store.get_saved_language())
+            self.assertEqual(store.get_language(), "en")
+
+            store.set_language("ru-RU")
+            self.assertEqual(StateStore(path).get_saved_language(), "ru")
+
     def test_recent_unprocessed_messages_returns_oldest_to_newest_within_limit(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             store = StateStore(Path(tmpdir) / "state.json")

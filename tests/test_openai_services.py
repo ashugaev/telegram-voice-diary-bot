@@ -18,7 +18,7 @@ class FormatterTests(unittest.IsolatedAsyncioTestCase):
         fake_client = FakeChatClient('{"title":"Title","text":"Body","tags":["work"]}')
 
         with patch.object(formatter, "client", fake_client):
-            result = await formatter.format_entry("raw")
+            result = await formatter.format_entry("raw", "ru")
 
         self.assertEqual(result, ("Title", "Body", ["work"]))
         kwargs = fake_client.chat.completions.calls[0]
@@ -29,18 +29,20 @@ class FormatterTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("исходный текст с минимальной правкой", system_prompt)
         self.assertIn("не переписывай стиль", system_prompt)
         self.assertIn("смысловые абзацы", system_prompt)
+        self.assertIn("Write title, text, and tags in Russian.", system_prompt)
 
     async def test_format_entry_uses_metadata_only_for_long_transcription(self):
         fake_client = FakeChatClient('{"title":"Long Title","tags":["work"]}')
         raw = "слово " * (formatter.LONG_TRANSCRIPTION_CHAR_LIMIT // 5 + 1)
 
         with patch.object(formatter, "client", fake_client):
-            result = await formatter.format_entry(raw)
+            result = await formatter.format_entry(raw, "en")
 
         self.assertEqual(result, ("Long Title", raw, ["work"]))
         kwargs = fake_client.chat.completions.calls[0]
         self.assertEqual(kwargs["max_completion_tokens"], formatter.METADATA_MAX_COMPLETION_TOKENS)
-        self.assertIn("Не возвращай полный текст заметки", kwargs["messages"][0]["content"])
+        self.assertIn("Do not return the full note text", kwargs["messages"][0]["content"])
+        self.assertIn("Write title, text, and tags in English.", kwargs["messages"][0]["content"])
 
     async def test_format_entry_falls_back_when_json_is_truncated(self):
         fake_client = FakeChatClient('{"title":"Title","text":"unfinished')
@@ -106,7 +108,7 @@ class SummaryTests(unittest.IsolatedAsyncioTestCase):
             patch.object(summary, "get_today_pages", fake_get_today_pages),
             patch.object(summary, "_fetch_page_text", fake_fetch_page_text),
         ):
-            result = await summary.generate_daily_summary()
+            result = await summary.generate_daily_summary("ru")
 
         self.assertEqual(
             result,
@@ -116,6 +118,8 @@ class SummaryTests(unittest.IsolatedAsyncioTestCase):
             "daily summary",
         )
         kwargs = fake_client.chat.completions.calls[0]
+        self.assertIn("прошедший день", kwargs["messages"][0]["content"])
+        self.assertIn("Write the report in Russian.", kwargs["messages"][0]["content"])
         self.assertEqual(
             kwargs["messages"][1]["content"],
             "### First\nFirst text\n\n### Second\nSecond text",
@@ -147,7 +151,7 @@ class SummaryTests(unittest.IsolatedAsyncioTestCase):
             patch.object(summary, "get_week_pages", fake_get_week_pages),
             patch.object(summary, "_fetch_page_text", fake_fetch_page_text),
         ):
-            result = await summary.generate_weekly_report()
+            result = await summary.generate_weekly_report("ru")
 
         self.assertEqual(
             result,
@@ -159,6 +163,8 @@ class SummaryTests(unittest.IsolatedAsyncioTestCase):
         kwargs = fake_client.chat.completions.calls[0]
         self.assertEqual(kwargs["model"], summary.settings.openai_summary_model)
         self.assertEqual(kwargs["max_completion_tokens"], 1024)
+        self.assertIn("прошедшую неделю", kwargs["messages"][0]["content"])
+        self.assertIn("Write the report in Russian.", kwargs["messages"][0]["content"])
         self.assertEqual(kwargs["messages"][1]["content"], "### 4 June | Title\nEntry text")
 
 

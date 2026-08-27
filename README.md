@@ -34,6 +34,7 @@ You'll need a Telegram bot token, an OpenAI API key, and a Notion integration + 
 | `/stat` | Saved audio minutes overall, by day, and by month |
 | `/memory` | Rebuild the author profile from every saved note, guided by focus points you supply |
 | `/rules` | Show the behavior rules the bot learned from you |
+| `/language` | Switch bot UI and AI answer language |
 
 The bot publishes this list to Telegram on startup, so typing `/` in the chat shows it.
 

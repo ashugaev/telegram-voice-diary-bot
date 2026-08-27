@@ -1,0 +1,378 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: diary-bot\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: ru\n"
+
+msgid "adding_anyway"
+msgstr "Добавляю это голосовое еще раз..."
+
+msgid "button.add_anyway"
+msgstr "Добавить все равно"
+
+msgid "button.back_preview"
+msgstr "← Назад к превью"
+
+msgid "button.cancel"
+msgstr "Отмена"
+
+msgid "button.cancel_draft"
+msgstr "Удалить черновик"
+
+msgid "button.confirm"
+msgstr "✓ Подтвердить"
+
+msgid "button.date"
+msgstr "Дата: {date}"
+
+msgid "button.format"
+msgstr "✦ Формат"
+
+msgid "button.highlighted"
+msgstr "⭐ Хайлайт"
+
+msgid "button.mark_highlight"
+msgstr "Отметить хайлайтом ⭐"
+
+msgid "button.original"
+msgstr "↺ Оригинал"
+
+msgid "button.retry"
+msgstr "Повторить"
+
+msgid "button.roast"
+msgstr "🔥 Разъёб"
+
+msgid "button.save"
+msgstr "✓ Сохранить"
+
+msgid "button.tags"
+msgstr "✎ Теги"
+
+msgid "button.text"
+msgstr "✎ Текст"
+
+msgid "button.title"
+msgstr "✎ Заголовок"
+
+msgid "cancelled"
+msgstr "Отменено."
+
+msgid "cmd.help"
+msgstr "Команды и кнопки"
+
+msgid "cmd.language"
+msgstr "Сменить язык"
+
+msgid "cmd.memory"
+msgstr "Пересобрать профиль автора"
+
+msgid "cmd.rules"
+msgstr "Правила поведения бота"
+
+msgid "cmd.start"
+msgstr "Что я делаю"
+
+msgid "cmd.stat"
+msgstr "Минуты аудио"
+
+msgid "cmd.weekly"
+msgstr "Итоги недели сейчас"
+
+msgid "daily.empty_push"
+msgstr "Как прошел день? Уверен, есть чем гордиться."
+
+msgid "daily.header"
+msgstr "*Итоги дня*"
+
+msgid "date.choose"
+msgstr "Выбери дату записи из последних 7 дней.\n\nСейчас: <code>{date}</code>"
+
+msgid "date.gone"
+msgstr "Эта дата уже недоступна. Выбери из меню снова."
+
+msgid "date.today"
+msgstr "Сегодня ({date})"
+
+msgid "date.yesterday"
+msgstr "Вчера ({date})"
+
+msgid "draft.gone"
+msgstr "Этот черновик уже недоступен."
+
+msgid "draft.saving"
+msgstr "Этот черновик уже сохраняется."
+
+msgid "duplicate.entry"
+msgstr "Эта запись уже добавлена.\n\nДобавить еще раз?"
+
+msgid "duplicate.voice"
+msgstr "Это голосовое уже добавлено.\n\nДобавить еще раз?"
+
+msgid "edit.tags"
+msgstr "Пришли теги через запятую:"
+
+msgid "edit.text"
+msgstr "Пришли новый текст:"
+
+msgid "edit.title"
+msgstr "Пришли новый заголовок:"
+
+msgid "error"
+msgstr "Ошибка: {error}"
+
+msgid "formatted_already"
+msgstr "Этот черновик уже отформатирован."
+
+msgid "formatted_missing"
+msgstr "Отформатированный текст больше недоступен."
+
+msgid "formatter.untitled"
+msgstr "Без названия"
+
+msgid "help"
+msgstr "*Отправка*\nГолос или текст. Я распознаю, озаглавлю, проставлю теги и покажу превью.\n\n*Кнопки превью*\n`✎ Заголовок` `✎ Текст` `✎ Теги` — ответь новым значением\n`✦ Формат` — привести текст в порядок, `↺ Оригинал` вернет исходник\n`Дата` — сегодня или последние 6 дней\n`Хайлайт ⭐` — отметить для недельного отчета\n`🔥 Разъёб` — честный разбор, ответь чтобы продолжить\n`✓ Сохранить` — записать в Notion, до этого ничего не сохраняется\n`Отмена` — удалить черновик\n\n*Команды*\n{commands}\n\n*Автоматически*\nДайджест дня в 21:00. Недельный отчет в воскресенье в 21:00."
+
+msgid "language.changed"
+msgstr "Язык переключен на {language_name}."
+
+msgid "language.choose"
+msgstr "Выбери язык:"
+
+msgid "language.current"
+msgstr "Текущий язык: {language_name}."
+
+msgid "language.invalid"
+msgstr "Такой язык недоступен."
+
+msgid "listening"
+msgstr "Слушаю..."
+
+msgid "memory.about"
+msgstr "О тебе"
+
+msgid "memory.api_missing"
+msgstr "Ключ AI-провайдера не настроен."
+
+msgid "memory.cancelled"
+msgstr "Пересборка памяти отменена."
+
+msgid "memory.confirm"
+msgstr "🧠 Готов пересобрать долгосрочную память\n\n{focus}\n{stored}\n\nКаждая заметка стоит один AI-запрос, поэтому полный проход займет время. Прогресс сохраняется по ходу."
+
+msgid "memory.done"
+msgstr "✅ Долгосрочная память пересобрана"
+
+msgid "memory.empty_skipped"
+msgstr "Пустых заметок пропущено: {count}"
+
+msgid "memory.empty_stored"
+msgstr "Пока ничего не сохранено — профиль будет собран с нуля."
+
+msgid "memory.facts"
+msgstr "Фактов: {before} → {after}"
+
+msgid "memory.failed"
+msgstr "Пересборка памяти упала: {error}"
+
+msgid "memory.failed_count"
+msgstr "Заметок с ошибкой: {count}"
+
+msgid "memory.focus"
+msgstr "Фокус: {focus}"
+
+msgid "memory.intro"
+msgstr "🧠 Пересборка долгосрочной памяти\n\nЯ пройду все сохраненные записи в Notion от старых к новым и пересоберу профиль автора заметка за заметкой — один AI-запрос на заметку, как при обычной отправке.\n\n{stored}\n\nОтветь фокусом для этого прохода: что важнее всего, что сохранить, что убрать.\nОтправь - чтобы пересобрать без фокуса."
+
+msgid "memory.no_focus"
+msgstr "Фокус: нет"
+
+msgid "memory.no_notes"
+msgstr "🧠 В Notion нет сохраненных заметок — пересобирать не из чего."
+
+msgid "memory.no_speech_retry"
+msgstr "{model} не распознал речь. Запусти /memory снова для повтора."
+
+msgid "memory.notes_read"
+msgstr "Заметок прочитано: {count}"
+
+msgid "memory.progress"
+msgstr "🧠 Пересобираю долгосрочную память...\n\n{bar}\nФактов: {facts}\n{focus}"
+
+msgid "memory.reason"
+msgstr "Причина: {reason}"
+
+msgid "memory.request_gone"
+msgstr "Этот запрос пересборки памяти уже недоступен."
+
+msgid "memory.rules"
+msgstr "Правила"
+
+msgid "memory.running"
+msgstr "Пересборка памяти уже идет. Дождись завершения."
+
+msgid "memory.saved_so_far"
+msgstr "Все обработанное уже сохранено."
+
+msgid "memory.starting"
+msgstr "🧠 Начинаю пересборку долгосрочной памяти..."
+
+msgid "memory.stopped"
+msgstr "⚠️ Пересборка долгосрочной памяти остановилась раньше"
+
+msgid "memory.stored"
+msgstr "Сейчас сохранено: {count} факт(ов) — беру их стартовой точкой и поправлю по ходу."
+
+msgid "memory.updated"
+msgstr "🧠 Память обновлена"
+
+msgid "memory.voice_retry"
+msgstr "Ошибка: {error}\n\nЗапусти /memory снова для повтора."
+
+msgid "message.gone"
+msgstr "Это сообщение уже недоступно."
+
+msgid "not_saved"
+msgstr "Не сохранено в Notion: {error}\nЧерновик сохранен. Нажми Сохранить для повтора или Отмена для удаления."
+
+msgid "original_already"
+msgstr "Этот черновик уже показывает оригинальный текст."
+
+msgid "original_missing"
+msgstr "Оригинальный текст больше недоступен."
+
+msgid "preparing"
+msgstr "Готовлю превью..."
+
+msgid "preview.date"
+msgstr "Дата: <code>{date}</code>"
+
+msgid "preview.fallback"
+msgstr "<code>Превью слишком длинное для Telegram. Полный текст сохранен для Сохранить/Правка/Формат.</code>"
+
+msgid "preview.truncated"
+msgstr "\n\n<code>Превью обрезано. Страница {page}/{page_count}. Полный текст сохранен для Сохранить/Правка/Формат.</code>"
+
+msgid "processing"
+msgstr "Это сообщение уже обрабатывается."
+
+msgid "retrying"
+msgstr "Повторяю..."
+
+msgid "roast.empty"
+msgstr "Нечего разбирать — текст пустой."
+
+msgid "roast.failed"
+msgstr "Разъёб упал: {error}"
+
+msgid "roast.status"
+msgstr "🔥 Разбираю..."
+
+msgid "roast.thinking"
+msgstr "🔥 Думаю..."
+
+msgid "roast.unavailable"
+msgstr "🔥 Разъёб недоступен: укажи ключ AI-провайдера в .env."
+
+msgid "rules.empty"
+msgstr "🧠 Правил пока нет. Скажи в ответе на разъёб, как мне себя вести — я запомню."
+
+msgid "rules.header"
+msgstr "🧠 Правила"
+
+msgid "saved"
+msgstr "✓ Сохранено в Notion и проверено"
+
+msgid "saving"
+msgstr "Сохраняю в Notion..."
+
+msgid "source.failed"
+msgstr "Не смог открыть исходное сообщение. Возможно, оно удалено или больше недоступно."
+
+msgid "source.message"
+msgstr "Исходное сообщение"
+
+msgid "speech.empty"
+msgstr "{model} не распознал речь в этом сообщении."
+
+msgid "stat.counting"
+msgstr "Считаю сохраненные аудио..."
+
+msgid "stat.error"
+msgstr "Ошибка подсчета аудио-статистики."
+
+msgid "stats.all_time"
+msgstr "все время"
+
+msgid "stats.audio_count"
+msgstr "{count} аудио"
+
+msgid "stats.audio_header"
+msgstr "*Аудио статистика*"
+
+msgid "stats.audio_line"
+msgstr "Аудио: {duration} · {count}"
+
+msgid "stats.busiest_day"
+msgstr "Самый насыщенный день: {day}, {duration}"
+
+msgid "stats.daily_header"
+msgstr "*По дням за последние 7 дней*"
+
+msgid "stats.day_header"
+msgstr "*Цифры дня*"
+
+msgid "stats.duration.hours"
+msgstr "{hours} ч"
+
+msgid "stats.duration.hours_minutes"
+msgstr "{hours} ч {minutes} мин"
+
+msgid "stats.duration.minutes"
+msgstr "{minutes} мин"
+
+msgid "stats.duration.zero"
+msgstr "0 мин"
+
+msgid "stats.entries_line"
+msgstr "Записи: {count}"
+
+msgid "stats.last_7_days"
+msgstr "последние 7 дней"
+
+msgid "stats.monthly_header"
+msgstr "*По месяцам за последние 6 месяцев*"
+
+msgid "stats.total_line"
+msgstr "Всего: {duration} · {count}"
+
+msgid "stats.week_header"
+msgstr "*Цифры недели*"
+
+msgid "stats.week_line"
+msgstr "За неделю: {duration} · {count}"
+
+msgid "transcribing"
+msgstr "Распознаю..."
+
+msgid "voice.gone"
+msgstr "Это голосовое уже недоступно."
+
+msgid "weekly.empty"
+msgstr "На этой неделе записей нет."
+
+msgid "weekly.empty_push"
+msgstr "На этой неделе записей нет — следующая неделя чистая."
+
+msgid "weekly.error"
+msgstr "Ошибка генерации недельного отчета."
+
+msgid "weekly.generating"
+msgstr "Генерирую недельный отчет..."
+
+msgid "weekly.header"
+msgstr "*Итоги недели*"
+
+msgid "welcome"
+msgstr "👋 Пиздабол на связи.\n\nПрисылай голос или текст. Я распознаю, добавлю заголовок и теги, покажу превью. Ты правишь, жмешь Сохранить, запись улетает в Notion.\n\nДайджест дня в 21:00. Остальное: /help."

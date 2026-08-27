@@ -7,6 +7,7 @@ from typing import Any
 
 from services import memory
 from services.memory import MemoryItem
+from services.i18n import DEFAULT_LANGUAGE, normalize_language
 
 
 STATE_PATH = Path(os.getenv("BOT_STATE_PATH", ".data/message_state.json"))
@@ -35,6 +36,7 @@ class StateStore:
                 "drafts": {},
                 "profile": {"points": [], "notion_mirror": []},
                 "rules": {"items": [], "notion_mirror": []},
+                "settings": {"language": DEFAULT_LANGUAGE},
             }
         with self.path.open("r", encoding="utf-8") as f:
             data = json.load(f)
@@ -47,6 +49,9 @@ class StateStore:
         data.setdefault("rules", {})
         data["rules"].setdefault("items", [])
         data["rules"].setdefault("notion_mirror", [])
+        data.setdefault("settings", {})
+        if data["settings"].get("language"):
+            data["settings"]["language"] = normalize_language(data["settings"].get("language"))
         return data
 
     def _save(self) -> None:
@@ -79,12 +84,13 @@ class StateStore:
         text: str,
         date: str | None,
         source_message_url: str | None = None,
+        language: str | None = None,
     ) -> str:
         return self._record_message(
             chat_id,
             message_id,
             "text",
-            {"text": text, "source_message_url": source_message_url},
+            {"text": text, "source_message_url": source_message_url, "language": normalize_language(language)},
             date,
         )
 
@@ -98,6 +104,7 @@ class StateStore:
         duration: int | None = None,
         file_size: int | None = None,
         source_message_url: str | None = None,
+        language: str | None = None,
     ) -> str:
         payload = {
             "file_id": file_id,
@@ -105,6 +112,7 @@ class StateStore:
             "duration": duration,
             "file_size": file_size,
             "source_message_url": source_message_url,
+            "language": normalize_language(language),
         }
         return self._record_message(chat_id, message_id, "voice", payload, date)
 
@@ -265,6 +273,19 @@ class StateStore:
         if self.data[section].get("notion_mirror") == items:
             return
         self.data[section]["notion_mirror"] = list(items)
+        self._save()
+
+    def get_language(self) -> str:
+        return normalize_language(self.data.get("settings", {}).get("language"))
+
+    def get_saved_language(self) -> str | None:
+        language = self.data.get("settings", {}).get("language")
+        return normalize_language(language) if language else None
+
+    def set_language(self, language: str) -> None:
+        normalized = normalize_language(language)
+        self.data.setdefault("settings", {})["language"] = normalized
+        self.data["settings"]["updated_at"] = _now()
         self._save()
 
     def save_draft(self, draft: dict[str, Any]) -> None:

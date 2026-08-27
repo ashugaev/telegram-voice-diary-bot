@@ -1,0 +1,378 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: diary-bot\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: en\n"
+
+msgid "adding_anyway"
+msgstr "Adding this voice message anyway..."
+
+msgid "button.add_anyway"
+msgstr "Add anyway"
+
+msgid "button.back_preview"
+msgstr "← Back to preview"
+
+msgid "button.cancel"
+msgstr "Cancel"
+
+msgid "button.cancel_draft"
+msgstr "Cancel draft"
+
+msgid "button.confirm"
+msgstr "✓ Confirm"
+
+msgid "button.date"
+msgstr "Date: {date}"
+
+msgid "button.format"
+msgstr "✦ Format"
+
+msgid "button.highlighted"
+msgstr "⭐ Highlighted"
+
+msgid "button.mark_highlight"
+msgstr "Mark as Highlight ⭐"
+
+msgid "button.original"
+msgstr "↺ Original"
+
+msgid "button.retry"
+msgstr "Retry"
+
+msgid "button.roast"
+msgstr "🔥 Roast"
+
+msgid "button.save"
+msgstr "✓ Save"
+
+msgid "button.tags"
+msgstr "✎ Tags"
+
+msgid "button.text"
+msgstr "✎ Text"
+
+msgid "button.title"
+msgstr "✎ Title"
+
+msgid "cancelled"
+msgstr "Cancelled."
+
+msgid "cmd.help"
+msgstr "Commands and buttons"
+
+msgid "cmd.language"
+msgstr "Switch language"
+
+msgid "cmd.memory"
+msgstr "Rebuild author profile from all notes"
+
+msgid "cmd.rules"
+msgstr "Behavior rules you taught me"
+
+msgid "cmd.start"
+msgstr "What I do"
+
+msgid "cmd.stat"
+msgstr "Saved audio minutes"
+
+msgid "cmd.weekly"
+msgstr "Weekly highlights now"
+
+msgid "daily.empty_push"
+msgstr "Hey, how was your day? I'm sure you have something to be proud of!"
+
+msgid "daily.header"
+msgstr "*Daily summary*"
+
+msgid "date.choose"
+msgstr "Choose note date from the last 7 days.\n\nCurrent: <code>{date}</code>"
+
+msgid "date.gone"
+msgstr "This date is no longer available. Choose from the menu again."
+
+msgid "date.today"
+msgstr "Today ({date})"
+
+msgid "date.yesterday"
+msgstr "Yesterday ({date})"
+
+msgid "draft.gone"
+msgstr "This draft is no longer available."
+
+msgid "draft.saving"
+msgstr "This draft is already saving."
+
+msgid "duplicate.entry"
+msgstr "This entry has already been added.\n\nAdd it again anyway?"
+
+msgid "duplicate.voice"
+msgstr "This voice message has already been added.\n\nAdd it again anyway?"
+
+msgid "edit.tags"
+msgstr "Send tags separated by commas:"
+
+msgid "edit.text"
+msgstr "Send a new text:"
+
+msgid "edit.title"
+msgstr "Send a new title:"
+
+msgid "error"
+msgstr "Error: {error}"
+
+msgid "formatted_already"
+msgstr "This draft is already formatted."
+
+msgid "formatted_missing"
+msgstr "Formatted text is no longer available."
+
+msgid "formatter.untitled"
+msgstr "Untitled"
+
+msgid "help"
+msgstr "*Send*\nVoice or text. I transcribe, title, tag, show preview.\n\n*Preview buttons*\n`✎ Title` `✎ Text` `✎ Tags` — reply with new value\n`✦ Format` — clean up text, `↺ Original` reverts\n`Date` — today or last 6 days\n`Highlight ⭐` — mark as week highlight\n`🔥 Roast` — honest take, reply to keep talking\n`✓ Save` — write to Notion, nothing saved before this\n`Cancel` — drop draft\n\n*Commands*\n{commands}\n\n*Automatic*\nDaily summary 21:00. Weekly report Sunday 21:00."
+
+msgid "language.changed"
+msgstr "Language switched to {language_name}."
+
+msgid "language.choose"
+msgstr "Choose language:"
+
+msgid "language.current"
+msgstr "Current language: {language_name}."
+
+msgid "language.invalid"
+msgstr "This language is not available."
+
+msgid "listening"
+msgstr "Listening..."
+
+msgid "memory.about"
+msgstr "About you"
+
+msgid "memory.api_missing"
+msgstr "AI provider API key is not configured."
+
+msgid "memory.cancelled"
+msgstr "Memory rebuild cancelled."
+
+msgid "memory.confirm"
+msgstr "🧠 Ready to rebuild long-term memory\n\n{focus}\n{stored}\n\nEvery note costs one AI request, so a full pass takes a while. Progress is saved as it goes."
+
+msgid "memory.done"
+msgstr "✅ Long-term memory rebuilt"
+
+msgid "memory.empty_skipped"
+msgstr "Empty notes skipped: {count}"
+
+msgid "memory.empty_stored"
+msgstr "Nothing is stored yet — the profile will be built from scratch."
+
+msgid "memory.facts"
+msgstr "Facts: {before} → {after}"
+
+msgid "memory.failed"
+msgstr "Memory rebuild failed: {error}"
+
+msgid "memory.failed_count"
+msgstr "Notes failed: {count}"
+
+msgid "memory.focus"
+msgstr "Focus: {focus}"
+
+msgid "memory.intro"
+msgstr "🧠 Long-term memory rebuild\n\nI'll walk through every saved note in Notion, oldest first, and rebuild the author profile note by note — one AI request per note, same as when you send a new one.\n\n{stored}\n\nReply with the focus points for this pass: what matters most, what to keep, what to drop.\nSend - to rebuild without extra focus."
+
+msgid "memory.no_focus"
+msgstr "Focus: none"
+
+msgid "memory.no_notes"
+msgstr "🧠 No saved notes found in Notion — nothing to rebuild from."
+
+msgid "memory.no_speech_retry"
+msgstr "{model} did not recognize any speech. Run /memory again to retry."
+
+msgid "memory.notes_read"
+msgstr "Notes read: {count}"
+
+msgid "memory.progress"
+msgstr "🧠 Rebuilding long-term memory...\n\n{bar}\nFacts: {facts}\n{focus}"
+
+msgid "memory.reason"
+msgstr "Reason: {reason}"
+
+msgid "memory.request_gone"
+msgstr "This memory rebuild request is no longer available."
+
+msgid "memory.rules"
+msgstr "Rules"
+
+msgid "memory.running"
+msgstr "A memory rebuild is already running. Wait for it to finish."
+
+msgid "memory.saved_so_far"
+msgstr "Everything processed so far is saved."
+
+msgid "memory.starting"
+msgstr "🧠 Starting the long-term memory rebuild..."
+
+msgid "memory.stopped"
+msgstr "⚠️ Long-term memory rebuild stopped early"
+
+msgid "memory.stored"
+msgstr "Stored now: {count} fact(s) — kept as the starting point and corrected along the way."
+
+msgid "memory.updated"
+msgstr "🧠 Memory updated"
+
+msgid "memory.voice_retry"
+msgstr "Error: {error}\n\nRun /memory again to retry."
+
+msgid "message.gone"
+msgstr "This message is no longer available."
+
+msgid "not_saved"
+msgstr "Not saved to Notion: {error}\nDraft kept. Press Save to retry or Cancel to discard."
+
+msgid "original_already"
+msgstr "This draft already shows the original text."
+
+msgid "original_missing"
+msgstr "Original text is no longer available."
+
+msgid "preparing"
+msgstr "Preparing preview..."
+
+msgid "preview.date"
+msgstr "Date: <code>{date}</code>"
+
+msgid "preview.fallback"
+msgstr "<code>Preview is too long for Telegram. Full text is kept for Save/Edit/Format.</code>"
+
+msgid "preview.truncated"
+msgstr "\n\n<code>Preview truncated. Page {page}/{page_count}. Full text is kept for Save/Edit/Format.</code>"
+
+msgid "processing"
+msgstr "This message is already processing."
+
+msgid "retrying"
+msgstr "Retrying..."
+
+msgid "roast.empty"
+msgstr "Nothing to roast — the text is empty."
+
+msgid "roast.failed"
+msgstr "Roast failed: {error}"
+
+msgid "roast.status"
+msgstr "🔥 Roasting..."
+
+msgid "roast.thinking"
+msgstr "🔥 Thinking..."
+
+msgid "roast.unavailable"
+msgstr "🔥 Roast is unavailable: set AI provider API key in .env."
+
+msgid "rules.empty"
+msgstr "🧠 No rules yet. Tell me in a roast reply how to behave — I'll remember it."
+
+msgid "rules.header"
+msgstr "🧠 Rules"
+
+msgid "saved"
+msgstr "✓ Saved to Notion and verified"
+
+msgid "saving"
+msgstr "Saving to Notion..."
+
+msgid "source.failed"
+msgstr "I couldn't open that source message. It may have been deleted or is no longer available."
+
+msgid "source.message"
+msgstr "Source message"
+
+msgid "speech.empty"
+msgstr "{model} did not recognize any speech in this message."
+
+msgid "stat.counting"
+msgstr "Counting saved audio stats..."
+
+msgid "stat.error"
+msgstr "Error generating audio stats."
+
+msgid "stats.all_time"
+msgstr "all time"
+
+msgid "stats.audio_count"
+msgstr "{count} audio"
+
+msgid "stats.audio_header"
+msgstr "*Audio stats*"
+
+msgid "stats.audio_line"
+msgstr "Audio: {duration} · {count}"
+
+msgid "stats.busiest_day"
+msgstr "Busiest day: {day}, {duration}"
+
+msgid "stats.daily_header"
+msgstr "*Daily, last 7 days*"
+
+msgid "stats.day_header"
+msgstr "*Day stats*"
+
+msgid "stats.duration.hours"
+msgstr "{hours} h"
+
+msgid "stats.duration.hours_minutes"
+msgstr "{hours} h {minutes} min"
+
+msgid "stats.duration.minutes"
+msgstr "{minutes} min"
+
+msgid "stats.duration.zero"
+msgstr "0 min"
+
+msgid "stats.entries_line"
+msgstr "Entries: {count}"
+
+msgid "stats.last_7_days"
+msgstr "last 7 days"
+
+msgid "stats.monthly_header"
+msgstr "*Monthly, last 6 months*"
+
+msgid "stats.total_line"
+msgstr "Total: {duration} · {count}"
+
+msgid "stats.week_header"
+msgstr "*Week stats*"
+
+msgid "stats.week_line"
+msgstr "Last 7 days: {duration} · {count}"
+
+msgid "transcribing"
+msgstr "Transcribing..."
+
+msgid "voice.gone"
+msgstr "This voice message is no longer available."
+
+msgid "weekly.empty"
+msgstr "No entries this week."
+
+msgid "weekly.empty_push"
+msgstr "No entries this week — next week is a fresh start!"
+
+msgid "weekly.error"
+msgstr "Error generating weekly report."
+
+msgid "weekly.generating"
+msgstr "Generating weekly report..."
+
+msgid "weekly.header"
+msgstr "*Weekly highlights*"
+
+msgid "welcome"
+msgstr "👋 Pizdabol here.\n\nSend voice or text. I transcribe, add title and tags, show a preview. You edit, press Save, it lands in Notion.\n\nDaily summary at 21:00. /help for the rest."

@@ -336,12 +336,12 @@ class CreatePreviewTests(unittest.IsolatedAsyncioTestCase):
             )
 
         entry_date = bot._default_entry_date()
-        fake_formatter.assert_awaited_once_with("raw transcription")
+        fake_formatter.assert_awaited_once_with("raw transcription", "en")
         self.assertEqual(len(fake_context.bot.edits), 1)
         edit = fake_context.bot.edits[0]
         self.assertEqual(edit["chat_id"], 123)
         self.assertEqual(edit["message_id"], 20)
-        self.assertEqual(edit["text"], bot._preview_text("Title", "raw transcription", ["work"], entry_date))
+        self.assertEqual(edit["text"], bot._preview_text("Title", "raw transcription", ["work"], entry_date, language="en"))
         self.assertEqual(edit["parse_mode"], "HTML")
         self.assertEqual(fake_state_store.marked_drafted, [("123:10", "entry-1")])
         self.assertEqual(fake_state_store.saved_drafts[0]["preview_msg_id"], 20)
@@ -379,7 +379,7 @@ class CreatePreviewTests(unittest.IsolatedAsyncioTestCase):
         ):
             await bot._create_preview(source_message, fake_context, "plain text")
 
-        fake_formatter.assert_awaited_once_with("plain text")
+        fake_formatter.assert_awaited_once_with("plain text", "en")
         self.assertEqual(len(fake_context.bot.sent_messages), 1)
         reply_parameters = fake_context.bot.sent_messages[0]["reply_parameters"]
         self.assertEqual(reply_parameters.message_id, 10)
@@ -488,7 +488,7 @@ class CreatePreviewTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(len(fake_context.application.created_tasks), 1)
         # The preview message carries the note about whatever the entry taught.
-        fake_update.assert_called_once_with("plain text", processing_message)
+        fake_update.assert_called_once_with("plain text", processing_message, "en")
 
 
 class DuplicateVoiceFlowTests(unittest.IsolatedAsyncioTestCase):
@@ -1001,7 +1001,8 @@ class StatCommandTests(unittest.IsolatedAsyncioTestCase):
         message = SimpleNamespace(reply_text=AsyncMock())
         update = SimpleNamespace(effective_message=message)
 
-        async def fake_build_audio_stats():
+        async def fake_build_audio_stats(language=None):
+            self.assertEqual(language, "en")
             return "stats"
 
         with (
@@ -1031,7 +1032,7 @@ class MainRegistrationTests(unittest.TestCase):
             for handler in command_handlers
         }
 
-        self.assertEqual(set(command_filters), {"start", "help", "weekly", "stat", "memory", "rules"})
+        self.assertEqual(set(command_filters), {"start", "help", "weekly", "stat", "memory", "rules", "language"})
         self.assertEqual(set(command_filters), {name for name, _ in bot.COMMANDS})
         for command, command_filter in command_filters.items():
             with self.subTest(command=command):
@@ -1040,15 +1041,34 @@ class MainRegistrationTests(unittest.TestCase):
     def test_help_text_lists_every_command(self):
         for name, description in bot.COMMANDS:
             with self.subTest(command=name):
-                self.assertIn(f"/{name} — {description}", bot.HELP_TEXT)
+                self.assertIn(f"/{name} — {bot.t(description)}", bot._help_text("en"))
+
+
+class LanguageCommandTests(unittest.IsolatedAsyncioTestCase):
+    async def test_language_callback_saves_language_and_updates_chat_commands(self):
+        query = FakeQuery(data="language:ru")
+        context = SimpleNamespace(bot=SimpleNamespace(set_my_commands=AsyncMock()))
+        update = SimpleNamespace(callback_query=query)
+
+        with patch.object(bot.state_store, "set_language") as set_language:
+            await bot.language_callback(update, context)
+
+        set_language.assert_called_once_with("ru")
+        kwargs = context.bot.set_my_commands.await_args.kwargs
+        self.assertEqual(kwargs["scope"].chat_id, 123)
+        self.assertEqual(
+            [(command.command, command.description) for command in context.bot.set_my_commands.await_args.args[0]],
+            [(name, bot.t(description, "ru")) for name, description in bot.COMMANDS],
+        )
+        self.assertIn("Русский", query.edits[0]["text"])
 
 
 class PostInitTests(unittest.IsolatedAsyncioTestCase):
     def _application(self):
-        bot_api = SimpleNamespace(published=None)
+        bot_api = SimpleNamespace(published=[])
 
-        async def set_my_commands(commands):
-            bot_api.published = commands
+        async def set_my_commands(commands, **kwargs):
+            bot_api.published.append((commands, kwargs))
 
         bot_api.set_my_commands = set_my_commands
         return SimpleNamespace(bot=bot_api)
@@ -1058,14 +1078,23 @@ class PostInitTests(unittest.IsolatedAsyncioTestCase):
         replayed = []
 
         with patch.object(bot.notion_memory, "ensure_memory_pages", new=AsyncMock()) as ensure, \
+                patch.object(bot, "_sync_memory", new=AsyncMock()) as sync_memory, \
                 patch.object(bot, "replay_unprocessed_messages", new=AsyncMock(side_effect=replayed.append)):
             await bot.post_init(application)
 
         self.assertEqual(
-            [(command.command, command.description) for command in application.bot.published],
-            [(name, description) for name, description in bot.COMMANDS],
+            [
+                (kwargs.get("language_code"), [(command.command, command.description) for command in commands])
+                for commands, kwargs in application.bot.published
+            ],
+            [
+                ("en", [(name, bot.t(description, "en")) for name, description in bot.COMMANDS]),
+                ("ru", [(name, bot.t(description, "ru")) for name, description in bot.COMMANDS]),
+                (None, [(name, bot.t(description)) for name, description in bot.COMMANDS]),
+            ],
         )
         ensure.assert_awaited_once_with()
+        sync_memory.assert_awaited_once_with()
         self.assertEqual(replayed, [application])
 
     async def test_post_init_still_replays_when_notion_is_unreachable(self):
@@ -1078,6 +1107,7 @@ class PostInitTests(unittest.IsolatedAsyncioTestCase):
                     new=AsyncMock(side_effect=RuntimeError("notion down")),
                 ), \
                 patch.object(bot.logger, "exception"), \
+                patch.object(bot, "_sync_memory", new=AsyncMock()), \
                 patch.object(bot, "replay_unprocessed_messages", new=AsyncMock(side_effect=replayed.append)):
             await bot.post_init(application)
 
@@ -1209,6 +1239,7 @@ class FakeStateStore:
         duration=None,
         file_size=None,
         source_message_url=None,
+        language=None,
     ):
         key = f"{chat_id}:{message_id}"
         self.messages[key] = {
@@ -1222,8 +1253,12 @@ class FakeStateStore:
             "file_size": file_size,
             "source_message_url": source_message_url,
             "date": date,
+            "language": language,
         }
         return key
+
+    def get_saved_language(self):
+        return None
 
     def find_duplicate_voice(self, file_unique_id, duration=None, file_size=None, exclude_key=None):
         return self.duplicate_voice
@@ -1373,7 +1408,8 @@ class RulesCommandTests(unittest.IsolatedAsyncioTestCase):
     async def _run(self, rules):
         reply_text = AsyncMock()
         update = SimpleNamespace(effective_message=SimpleNamespace(reply_text=reply_text))
-        with patch.object(bot.state_store, "get_rules", return_value=rules):
+        with patch.object(bot.state_store, "get_rules", return_value=rules), \
+                patch.object(bot, "_sync_bot_memory", new=AsyncMock()):
             await bot.handle_rules(update, SimpleNamespace())
         return reply_text.await_args.args[0]
 
@@ -1404,7 +1440,7 @@ class RoastFlowTests(unittest.IsolatedAsyncioTestCase):
         captured_points = []
         captured_rules = []
 
-        async def fake_roast(messages, points=None, rules=None):
+        async def fake_roast(messages, points=None, rules=None, language=None):
             captured.append([dict(m) for m in messages])
             captured_points.append(points)
             captured_rules.append(rules)
@@ -1528,7 +1564,7 @@ class RoastFlowTests(unittest.IsolatedAsyncioTestCase):
             await bot._roast_draft(query, context, {"id": "e", "text": "x", "chat_id": 1})
 
         reply_text.assert_awaited_once()
-        self.assertIn("ANTHROPIC_API_KEY", reply_text.await_args.args[0])
+        self.assertIn("AI provider API key", reply_text.await_args.args[0])
 
     async def test_update_profile_points_extracts_persists_and_mirrors(self):
         with patch.object(bot.state_store, "get_profile_points", return_value=_items("old fact")), \
@@ -1536,9 +1572,9 @@ class RoastFlowTests(unittest.IsolatedAsyncioTestCase):
                 patch.object(bot, "_sync_author_memory", new=AsyncMock()) as pull, \
                 patch.object(bot, "_sync_author_memory_held", new=AsyncMock()) as push, \
                 patch.object(bot.state_store, "set_profile_points") as save:
-            await bot._update_profile_points("today's entry")
+            await bot._update_profile_points("today's entry", language="en")
 
-        extract.assert_awaited_once_with("today's entry", _items("old fact"))
+        extract.assert_awaited_once_with("today's entry", _items("old fact"), language="en")
         save.assert_called_once_with(_items("fresh fact"))
         # Pull hand edits before extracting, push the merged profile after.
         pull.assert_awaited_once()
@@ -1606,7 +1642,7 @@ class RoastFlowTests(unittest.IsolatedAsyncioTestCase):
         context = SimpleNamespace(bot=fake_bot, user_data={})
         captured = []
 
-        async def fake_roast(messages, points=None, rules=None):
+        async def fake_roast(messages, points=None, rules=None, language=None):
             captured.append([dict(message) for message in messages])
             return _roast_reply("updated")
 
@@ -1673,7 +1709,7 @@ class RoastFlowTests(unittest.IsolatedAsyncioTestCase):
 
         captured = []
 
-        async def fake_roast(messages, points=None, rules=None):
+        async def fake_roast(messages, points=None, rules=None, language=None):
             captured.append([dict(m) for m in messages])
             return _roast_reply("answer to the question")
 
@@ -1771,7 +1807,7 @@ class RoastFlowTests(unittest.IsolatedAsyncioTestCase):
 
         captured = []
 
-        async def fake_roast(messages, points=None, rules=None):
+        async def fake_roast(messages, points=None, rules=None, language=None):
             captured.append([dict(m) for m in messages])
             return _roast_reply("answer to the spoken question")
 
@@ -1996,7 +2032,7 @@ class MemoryFocusReplyTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(cancel.callback_data, f"memory_cancel:{request_id}")
         self.assertEqual(
             bot._memory_requests(context)[request_id],
-            {"focus": "focus on work and health"},
+            {"focus": "focus on work and health", "language": "en"},
         )
         # The prompt is consumed, so a later unrelated reply is not read as focus.
         self.assertEqual(bot._memory_prompts(context), {})
@@ -2012,7 +2048,7 @@ class MemoryFocusReplyTests(unittest.IsolatedAsyncioTestCase):
 
                 self.assertIn("Focus: none", user_msg.reply_text.await_args.args[0])
                 request = next(iter(bot._memory_requests(context).values()))
-                self.assertEqual(request, {"focus": ""})
+                self.assertEqual(request, {"focus": "", "language": "en"})
 
     async def test_unrelated_reply_still_falls_through_to_handle_text(self):
         context = self._context()
@@ -2052,7 +2088,7 @@ class MemoryFocusReplyTests(unittest.IsolatedAsyncioTestCase):
         record_voice.assert_not_called()
         self.assertIn("keep the work stuff", fake_bot.edits[-1]["text"])
         request = next(iter(bot._memory_requests(context).values()))
-        self.assertEqual(request, {"focus": "keep the work stuff"})
+        self.assertEqual(request, {"focus": "keep the work stuff", "language": "en"})
 
     async def test_voice_reply_without_speech_reports_and_starts_no_request(self):
         fake_bot = FakeRoastBot()
@@ -2145,13 +2181,14 @@ class MemoryRebuildRunnerTests(unittest.IsolatedAsyncioTestCase):
                 patch.object(bot.state_store, "set_profile_points") as saved, \
                 patch.object(bot, "_sync_author_memory", new=AsyncMock()) as self.mirror, \
                 patch.object(bot.profile_rebuild, "rebuild_profile", new=fake_rebuild):
-            await bot._run_memory_rebuild(self.context, self.status_message, "work")
+            await bot._run_memory_rebuild(self.context, self.status_message, "work", "en")
         return saved
 
     async def test_progress_is_persisted_per_note_and_edits_are_throttled(self):
-        async def fake_rebuild(focus, existing, on_progress):
+        async def fake_rebuild(focus, existing, on_progress, language=None):
             self.assertEqual(focus, "work")
             self.assertEqual(existing, _items("old"))
+            self.assertEqual(language, "en")
             for handled in range(7):
                 await on_progress(_memory_progress(handled, 6, _items("old", *(f"f{i}" for i in range(handled)))))
             return _memory_progress(6, 6, _items("old", *(f"f{i}" for i in range(6))))
@@ -2175,7 +2212,7 @@ class MemoryRebuildRunnerTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("Focus: work", text)
 
     async def test_final_message_reports_the_delta(self):
-        async def fake_rebuild(focus, existing, on_progress):
+        async def fake_rebuild(focus, existing, on_progress, language=None):
             return _memory_progress(5, 5, ["a", "b", "c"], skipped=1, failed=1)
 
         await self._run(fake_rebuild, before=["a"])
@@ -2189,7 +2226,7 @@ class MemoryRebuildRunnerTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("100%", text)
 
     async def test_aborted_pass_is_reported_as_stopped_early(self):
-        async def fake_rebuild(focus, existing, on_progress):
+        async def fake_rebuild(focus, existing, on_progress, language=None):
             return _memory_progress(3, 40, ["a"], failed=3, aborted_reason="3 notes in a row failed at note 3/40")
 
         await self._run(fake_rebuild)
@@ -2200,7 +2237,7 @@ class MemoryRebuildRunnerTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Everything processed so far is saved", text)
 
     async def test_empty_database_is_reported_without_a_delta(self):
-        async def fake_rebuild(focus, existing, on_progress):
+        async def fake_rebuild(focus, existing, on_progress, language=None):
             return _memory_progress(0, 0, [])
 
         await self._run(fake_rebuild)

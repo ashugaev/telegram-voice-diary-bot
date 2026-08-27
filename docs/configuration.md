@@ -18,7 +18,7 @@ cp .env.example .env
 | `ANTHROPIC_API_KEY` | Required only when `AI_PROVIDER=anthropic` |
 | `DIARY_DAY_START_HOUR` | Optional. Hour the diary day starts in `TIMEZONE`, `0`-`23`; defaults to `0` |
 | `SILENT_NOTIFICATIONS` | Optional. Send messages without push notifications; defaults to `true` |
-| `ROAST_LANGUAGE` | Optional. Language the roast replies in; defaults to `Russian` |
+| `ROAST_LANGUAGE` | Optional fallback roast language before `/language` is chosen; defaults to `Russian` |
 | `ROAST_SYSTEM_PROMPT` | Optional. Overrides the built-in roast persona |
 
 ### Model overrides

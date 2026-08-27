@@ -53,6 +53,10 @@ Reply to any roast message to keep the thread going; the bot sends the whole pri
 
 The button is available whenever the active AI provider's API key is set (see [Configuration](configuration.md)). The persona is built in but can be replaced with `ROAST_SYSTEM_PROMPT`; set `ROAST_LANGUAGE` to force a reply language regardless of the entry's language.
 
+## Language
+
+Use `/language` to switch the bot between English and Russian. The choice localizes Telegram text, buttons, command descriptions, daily and weekly reports, formatter prompts, and roast replies. Before a choice is saved, the bot falls back to Telegram's user language code.
+
 ### Behavior rules — `/rules`
 
 Separate from the profile, the bot keeps a short list of **behavior rules** — standing instructions on how it should act ("stop asking questions", "swear less", "be blunter about money"). They are injected at the end of the roast system prompt and **outrank the persona**: on conflict, the rules win.

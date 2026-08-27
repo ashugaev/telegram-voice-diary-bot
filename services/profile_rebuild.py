@@ -105,6 +105,7 @@ async def _rebuild_step(
     page: dict,
     points: list[MemoryItem],
     focus: str | None,
+    language: str | None,
 ) -> tuple[str, list[MemoryItem]]:
     """Fold one note into the profile. Never raises: on failure the caller keeps
     the points it already had and the walk moves on."""
@@ -119,7 +120,7 @@ async def _rebuild_step(
         return SKIPPED, points
 
     try:
-        return PROCESSED, await roast.extract_profile_points(note, points, focus=focus)
+        return PROCESSED, await roast.extract_profile_points(note, points, focus=focus, language=language)
     except Exception:
         logger.exception("Profile rebuild could not extract points from page %s", page_id)
         return FAILED, points
@@ -138,6 +139,7 @@ async def rebuild_profile(
     focus: str | None,
     existing_points: list[MemoryItem],
     on_progress=None,
+    language: str | None = None,
 ) -> RebuildProgress:
     """Rebuild the author profile from every saved diary note, oldest first.
 
@@ -173,7 +175,7 @@ async def rebuild_profile(
             if index:
                 await _pause()
 
-            outcome, points = await _rebuild_step(page, points, focus)
+            outcome, points = await _rebuild_step(page, points, focus, language)
             counts[outcome] += 1
             consecutive_failures = consecutive_failures + 1 if outcome == FAILED else 0
             if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
