@@ -330,33 +330,7 @@ p, dd, .cmd-list span { text-wrap: pretty; }
   font-size: 15px; color: var(--tg-sub);
 }
 .tg-ph { flex: 1; }
-.tg-smile {
-  width: 21px; height: 21px; border-radius: 50%; flex: none;
-  border: 1.6px solid var(--tg-sub); position: relative;
-}
-.tg-smile::before {
-  content: ""; position: absolute; left: 4px; top: 6px;
-  width: 3px; height: 3px; border-radius: 50%; background: var(--tg-sub);
-  box-shadow: 7px 0 0 var(--tg-sub);
-}
-.tg-smile::after {
-  content: ""; position: absolute; left: 4px; top: 9px;
-  width: 10px; height: 5px;
-  border: 1.6px solid var(--tg-sub); border-top: 0;
-  border-radius: 0 0 8px 8px;
-}
-.tg-mic { width: 21px; height: 21px; position: relative; flex: none; }
-.tg-mic::before {
-  content: ""; position: absolute; left: 7.5px; top: 1px;
-  width: 6px; height: 11px; border-radius: 3px; background: var(--tg-sub);
-}
-.tg-mic::after {
-  content: ""; position: absolute; left: 3.5px; top: 11px;
-  width: 14px; height: 7px;
-  border: 1.6px solid var(--tg-sub); border-top: 0;
-  border-radius: 0 0 9px 9px;
-}
-
+.tg-input .tg-act { width: 22px; height: 22px; }
 @keyframes grow {
   from { grid-template-rows: minmax(0, 0fr); opacity: 0; }
   to   { grid-template-rows: minmax(0, 1fr); opacity: 1; }
