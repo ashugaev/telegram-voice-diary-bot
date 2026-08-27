@@ -26,14 +26,15 @@ Spur sidecar `landing` runs the same command on a reserved port.
 ## Rules
 
 - Copy changes land in EN and RU together.
-- Hero chat mimics Telegram's official Night theme palette; keep the two in step.
+- Hero chat mimics Telegram Desktop's Night theme (windowBg #17212b, msgIn #182533, msgOut #2b5278, ticks #6bbfff) and mirrors what the bot really sends: reply quote, draft entry, inline keyboard, save rewriting the same message, roast, memory update.
+- Chat reveal runs once on load and only under `prefers-reduced-motion: no-preference`; the full transcript is in the HTML for crawlers.
 - No JS. Motion is CSS only and stops under `prefers-reduced-motion`.
 
 ## Before hosting
 
-Replace `https://pizdabol.app/` with the real domain in `index.html` (canonical, OG,
-JSON-LD), `robots.txt`, and `sitemap.xml`. Replace `t.me/pizdabol_ai_bot` with the real
-bot handle.
+Replace `https://pizdabol.app/` with the real domain in `index.html` and
+`ru/index.html` (canonical, hreflang, og:url, JSON-LD `url`), `robots.txt`, and
+`sitemap.xml`. Replace `t.me/pizdabol_ai_bot` with the real bot handle in both pages.
 
 Deploy target: any static host — GitHub Pages, Cloudflare Pages, Netlify, nginx root.
 Upload the directory, nothing to build.

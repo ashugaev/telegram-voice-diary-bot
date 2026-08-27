@@ -218,7 +218,8 @@ h1, h2, h3 { font-family: var(--display); font-weight: 700; margin: 0; letter-sp
 
 /* one-shot reveal: each slot grows its row in turn */
 .slot { display: grid; grid-template-rows: minmax(0, 1fr); }
-.row { padding: 0 10px 8px; margin: 0 -10px; display: flex; }
+.slot { padding: 0 10px; margin: 0 -10px; }
+.row { padding: 0 0 8px; display: flex; }
 .row.in { justify-content: flex-start; }
 .row.out { justify-content: flex-end; }
 
