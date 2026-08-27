@@ -7,10 +7,11 @@ Server-rendered by definition, so crawlers get the full text.
 
 | File | Purpose |
 |---|---|
-| `index.html` | Whole page: markup, meta, OG tags, JSON-LD |
+| `index.html` | EN page: markup, meta, OG tags, JSON-LD, icon sprite |
+| `ru/index.html` | RU page, same structure, hreflang-paired with EN |
 | `styles.css` | All styles |
 | `og.png` | 1200x630 social preview |
-| `favicon.svg` | Tab icon |
+| `favicon.svg`, `avatar.svg` | Tab icon and the bot avatar in the hero chat |
 | `robots.txt`, `sitemap.xml` | Crawler hints |
 | `src/og-card.html` | Source of `og.png`, screenshot it at 1200x630 to regenerate |
 
@@ -21,6 +22,12 @@ python3 -m http.server 3080 --bind 127.0.0.1 --directory landing
 ```
 
 Spur sidecar `landing` runs the same command on a reserved port.
+
+## Rules
+
+- Copy changes land in EN and RU together.
+- Hero chat mimics Telegram's official Night theme palette; keep the two in step.
+- No JS. Motion is CSS only and stops under `prefers-reduced-motion`.
 
 ## Before hosting
 

@@ -1,0 +1,165 @@
+- generic [active] [ref=f3e1]:
+  - link "Skip to content" [ref=f3e2] [cursor=pointer]:
+    - /url: "#main"
+  - banner [ref=f3e3]:
+    - link "pizdabol." [ref=f3e4] [cursor=pointer]:
+      - /url: /
+    - navigation "Primary" [ref=f3e5]:
+      - link "The thread" [ref=f3e6] [cursor=pointer]:
+        - /url: "#thread"
+      - link "How it works" [ref=f3e7] [cursor=pointer]:
+        - /url: "#flow"
+      - link "Source" [ref=f3e8] [cursor=pointer]:
+        - /url: https://github.com/ashugaev/telegram-voice-diary-bot
+      - link "RU" [ref=f3e9] [cursor=pointer]:
+        - /url: /ru/
+    - link "Open in Telegram" [ref=f3e10] [cursor=pointer]:
+      - /url: https://t.me/pizdabol_ai_bot
+  - main [ref=f3e11]:
+    - generic [ref=f3e12]:
+      - generic [ref=f3e13]:
+        - paragraph [ref=f3e14]: voice note → notion row → honest reply
+        - heading [level=1] [ref=f3e15]:
+          - text: Say it out loud. It files the entry, then it
+          - emphasis [ref=f3e16]: argues
+          - text: with you.
+        - paragraph [ref=f3e17]: Pizdabol listens to your rambling voice notes, writes them into your Notion journal as clean, titled, tagged entries — and then says the thing your diary never says back.
+        - generic [ref=f3e18]:
+          - link "Open in Telegram" [ref=f3e19] [cursor=pointer]:
+            - /url: https://t.me/pizdabol_ai_bot
+          - link "Run your own copy" [ref=f3e20] [cursor=pointer]:
+            - /url: https://github.com/ashugaev/telegram-voice-diary-bot
+        - paragraph [ref=f3e21]: Every entry lands in your own Notion. We store nothing — there is no server of ours in the middle.
+      - 'img "Telegram chat: a 47-second voice note becomes a Notion diary entry titled Ninth attempt at a morning, the bot answers bluntly, the author asks it to stay blunt, and the bot updates what it remembers." [ref=f3e23]':
+        - generic [ref=f3e24]:
+          - generic [ref=f3e26]:
+            - paragraph [ref=f3e27]: Pizdabol
+            - paragraph [ref=f3e28]:
+              - generic [ref=f3e29]: online
+              - generic [ref=f3e30]: typing…
+          - generic [ref=f3e31]: ⋮
+        - generic [ref=f3e32]:
+          - paragraph [ref=f3e33]: Tuesday
+          - article [ref=f3e35]:
+            - generic [ref=f3e36]: 0:47
+            - paragraph [ref=f3e71]: 23:41 ✓✓
+          - generic:
+            - generic:
+              - article [ref=f3e72]:
+                - paragraph [ref=f3e73]: Draft entry
+                - heading "Ninth attempt at a morning" [level=2] [ref=f3e74]
+                - paragraph [ref=f3e75]: Said nine again, started at noon again. Spent the evening being productive about things nobody asked for, and now it's midnight and I'm annoyed at myself in the exact same words as Sunday.
+                - paragraph [ref=f3e76]:
+                  - generic [ref=f3e77]: "#routine"
+                  - generic [ref=f3e78]: "#work"
+                  - generic [ref=f3e79]: "#self"
+                - paragraph [ref=f3e80]: 23:41
+                - paragraph [ref=f3e81]:
+                  - generic [ref=f3e82]: Format
+                  - generic [ref=f3e83]: Title
+                  - generic [ref=f3e84]: Tags
+                  - generic [ref=f3e85]: Date
+                  - generic [ref=f3e86]: Save
+              - paragraph [ref=f3e87]
+          - generic:
+            - generic:
+              - article [ref=f3e91]:
+                - paragraph [ref=f3e92]: 🔥 Roast
+                - paragraph [ref=f3e93]: You don't have a morning problem, you have a 1 a.m. problem. Third note this month with the same sentence in it. Want me to start counting out loud?
+                - paragraph [ref=f3e94]: 23:42
+              - paragraph [ref=f3e95]
+          - article [ref=f3e100]:
+            - paragraph [ref=f3e101]: counting is fine. just don't be nice about it
+            - paragraph [ref=f3e102]: 23:42 ✓✓
+          - generic:
+            - generic:
+              - article [ref=f3e103]:
+                - paragraph [ref=f3e104]: 🧠 Memory updated
+                - paragraph [ref=f3e105]: "About you: evening productivity is avoidance, not output."
+                - paragraph [ref=f3e106]: "Rule: no cushioning — say it straight."
+                - paragraph [ref=f3e107]: 23:42
+              - paragraph [ref=f3e108]
+          - paragraph [ref=f3e113]:
+            - generic [ref=f3e114]: ✓
+            - text: Saved to Notion — Diary / 26 Aug 2026
+        - generic [ref=f3e115]:
+          - generic [ref=f3e116]: 🖇
+          - generic [ref=f3e117]: Message
+    - generic [ref=f3e119]:
+      - heading "A note becomes an entry in four moves" [level=2] [ref=f3e120]
+      - list [ref=f3e121]:
+        - listitem [ref=f3e122]:
+          - generic [ref=f3e123]: "01"
+          - heading "You talk" [level=3] [ref=f3e124]
+          - paragraph [ref=f3e125]: Voice or text, any length, no format to follow. Send it the way you'd send it to a friend at midnight.
+        - listitem [ref=f3e126]:
+          - generic [ref=f3e127]: "02"
+          - heading "It writes" [level=3] [ref=f3e128]
+          - paragraph [ref=f3e129]: Transcribed, cleaned into readable prose, given a title, tags, and today's date. The original wording stays available.
+        - listitem [ref=f3e130]:
+          - generic [ref=f3e131]: "03"
+          - heading "You edit" [level=3] [ref=f3e132]
+          - paragraph [ref=f3e133]: Change the title, retag, move the date, reformat the text. Nothing reaches Notion until you press Save.
+        - listitem [ref=f3e134]:
+          - generic [ref=f3e135]: "04"
+          - heading "It files" [level=3] [ref=f3e136]
+          - paragraph [ref=f3e137]: One row in your journal database. No duplicates, no orphan pages, no scattered inbox to clean up later.
+    - generic [ref=f3e138]:
+      - heading "It keeps notes on you" [level=2] [ref=f3e139]
+      - generic [ref=f3e140]:
+        - generic [ref=f3e141]:
+          - term [ref=f3e142]: Roast
+          - definition [ref=f3e143]: An honest read on the entry you just sent. Reply to it and the conversation keeps going — deeper, with the rest of your diary in the room.
+        - generic [ref=f3e144]:
+          - term [ref=f3e145]: Profile
+          - definition [ref=f3e146]: A private knowledge base about you, built from your own notes without you filling in a single form. It posts a short line whenever it learns something new.
+        - generic [ref=f3e147]:
+          - term [ref=f3e148]: Rules
+          - definition [ref=f3e149]: Tell it to stop moralising, to answer in one line, to never mention your ex. It remembers, and the rules live on a Notion page you can edit by hand.
+        - generic [ref=f3e150]:
+          - term [ref=f3e151]: Storage
+          - definition [ref=f3e152]: "Entries, profile, and rules all live in your Notion. We keep nothing: no copies of your notes, no accounts, no servers of ours holding your diary."
+        - generic [ref=f3e153]:
+          - term [ref=f3e154]: Recaps
+          - definition [ref=f3e155]: A daily summary lands on its own. Ask for the weekly report whenever you want the longer view.
+    - generic [ref=f3e156]:
+      - heading "Commands" [level=2] [ref=f3e157]
+      - list [ref=f3e158]:
+        - listitem [ref=f3e159]:
+          - code [ref=f3e160]: /weekly
+          - generic [ref=f3e161]: Weekly highlight report, now
+        - listitem [ref=f3e162]:
+          - code [ref=f3e163]: /stat
+          - generic [ref=f3e164]: Minutes you've talked, by day and month
+        - listitem [ref=f3e165]:
+          - code [ref=f3e166]: /memory
+          - generic [ref=f3e167]: Rebuild the profile from every saved note
+        - listitem [ref=f3e168]:
+          - code [ref=f3e169]: /rules
+          - generic [ref=f3e170]: Show what it learned about how to talk to you
+        - listitem [ref=f3e171]:
+          - code [ref=f3e172]: /help
+          - generic [ref=f3e173]: Commands and preview buttons
+    - generic [ref=f3e174]:
+      - heading "Run it yourself" [level=2] [ref=f3e175]
+      - paragraph [ref=f3e176]:
+        - text: Open source Python. Your Telegram token, your OpenAI key, your Notion database, on a box you control. Your notes never touch our infrastructure, because there isn't any. Clone it, fill in
+        - code [ref=f3e177]: .env
+        - text: ", start the process — that's the whole install."
+      - generic [ref=f3e178]:
+        - link "Open in Telegram" [ref=f3e179] [cursor=pointer]:
+          - /url: https://t.me/pizdabol_ai_bot
+        - link "Read the source" [ref=f3e180] [cursor=pointer]:
+          - /url: https://github.com/ashugaev/telegram-voice-diary-bot
+  - contentinfo [ref=f3e181]:
+    - paragraph [ref=f3e182]: pizdabol.
+    - paragraph [ref=f3e183]: A diary that talks back. Built for the Notion Journal.
+    - paragraph [ref=f3e184]:
+      - link "GitHub" [ref=f3e185] [cursor=pointer]:
+        - /url: https://github.com/ashugaev/telegram-voice-diary-bot
+      - text: ·
+      - link "Telegram" [ref=f3e186] [cursor=pointer]:
+        - /url: https://t.me/pizdabol_ai_bot
+      - text: ·
+      - link "Русский" [ref=f3e187] [cursor=pointer]:
+        - /url: /ru/

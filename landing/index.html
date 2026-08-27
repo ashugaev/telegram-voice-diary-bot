@@ -6,11 +6,15 @@
 <title>Pizdabol — voice notes to a Notion diary, with a coach attached</title>
 <meta name="description" content="Send a voice note to Telegram. Pizdabol transcribes it, titles it, tags it, saves one row in your Notion journal — then tells you what you keep avoiding.">
 <link rel="canonical" href="https://pizdabol.app/">
+<link rel="alternate" hreflang="en" href="https://pizdabol.app/">
+<link rel="alternate" hreflang="ru" href="https://pizdabol.app/ru/">
+<link rel="alternate" hreflang="x-default" href="https://pizdabol.app/">
 <meta name="robots" content="index, follow">
 <meta name="theme-color" content="#14101f">
 
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Pizdabol">
+<meta property="og:locale" content="en_US">
 <meta property="og:url" content="https://pizdabol.app/">
 <meta property="og:title" content="Pizdabol — voice notes to a Notion diary, with a coach attached">
 <meta property="og:description" content="Talk into Telegram. It files the entry in Notion, then tells you what you keep avoiding.">
@@ -39,12 +43,27 @@
   "description": "Telegram bot that turns voice notes into structured Notion diary entries and coaches you on what it reads.",
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
   "isAccessibleForFree": true,
-  "license": "https://github.com/ashugaev/pizdabol-ai/blob/main/LICENSE",
-  "codeRepository": "https://github.com/ashugaev/pizdabol-ai"
+  "license": "https://github.com/ashugaev/telegram-voice-diary-bot/blob/main/LICENSE",
+  "codeRepository": "https://github.com/ashugaev/telegram-voice-diary-bot"
 }
 </script>
 </head>
 <body>
+<svg class="sprite" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg"><defs>
+<symbol id="i-mic" viewBox="0 0 24 24"><path d="M12 3.5a2.8 2.8 0 0 1 2.8 2.8v5.2a2.8 2.8 0 1 1-5.6 0V6.3A2.8 2.8 0 0 1 12 3.5Z" fill="currentColor"/><path d="M5.8 11a6.2 6.2 0 0 0 12.4 0M12 17.2V21M8.6 21h6.8" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round"/></symbol>
+<symbol id="i-notion" viewBox="0 0 24 24"><rect x="2.7" y="3.2" width="18.6" height="17.6" rx="3" stroke="currentColor" stroke-width="1.7" fill="none"/><path d="M8.6 16.6V7.8l6.8 8.4V7.4" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="i-flame" viewBox="0 0 24 24"><path d="M12 2.7s5.4 4 5.4 9.1a5.4 5.4 0 1 1-10.8 0c0-1.6.6-2.9 1.4-4 .2 1.3.9 2.2 1.9 2.4-.3-2.8.8-5.5 2.1-7.5Z" fill="currentColor"/></symbol>
+<symbol id="i-brain" viewBox="0 0 24 24"><path d="M12 4.2v15.6M9 4.2A3.1 3.1 0 0 0 6 7.3 2.9 2.9 0 0 0 4.4 10a2.9 2.9 0 0 0 1 2.2A3 3 0 0 0 6 17a3.1 3.1 0 0 0 3 2.8M15 4.2a3.1 3.1 0 0 1 3 3.1 2.9 2.9 0 0 1 1.6 2.7 2.9 2.9 0 0 1-1 2.2 3 3 0 0 1-.6 4.8 3.1 3.1 0 0 1-3 2.8" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/></symbol>
+<symbol id="i-rules" viewBox="0 0 24 24"><path d="M4 6.5h10M4 12h10M4 17.5h7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="m16.5 15.8 1.9 1.9 3.3-3.6" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3.3" y="5" width="17.4" height="15.4" rx="2.6" stroke="currentColor" stroke-width="1.7" fill="none"/><path d="M3.3 9.8h17.4M8 3.4v3.2M16 3.4v3.2M7.6 13.6h3M7.6 17h6.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+<symbol id="i-wand" viewBox="0 0 24 24"><path d="m4 20 9.4-9.4M15.6 4.2l1 2.2 2.2 1-2.2 1-1 2.2-1-2.2-2.2-1 2.2-1ZM19.4 13.2l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6ZM6.6 3.2l.6 1.4 1.4.6-1.4.6L6.6 7.2 6 5.8l-1.4-.6L6 4.6Z" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="i-sliders" viewBox="0 0 24 24"><path d="M5 4.6v5.2M5 14.2v5.2M12 4.6v9.6M12 18.6v.8M19 4.6v1.2M19 10.2v9.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="5" cy="12" r="2.2" stroke="currentColor" stroke-width="1.7" fill="none"/><circle cx="12" cy="16.4" r="2.2" stroke="currentColor" stroke-width="1.7" fill="none"/><circle cx="19" cy="8" r="2.2" stroke="currentColor" stroke-width="1.7" fill="none"/></symbol>
+<symbol id="i-telegram" viewBox="0 0 24 24"><path d="M21.3 4.3 2.9 11.4c-.9.3-.9 1.5.1 1.7l4.6 1.2 1.7 5.1c.3.8 1.3 1 1.9.3l2.4-2.5 4.6 3.4c.7.5 1.7.1 1.9-.7l3-13.6c.2-.9-.7-1.6-1.8-1.2Z" fill="currentColor"/></symbol>
+<symbol id="i-code" viewBox="0 0 24 24"><path d="m8.4 7.6-5 4.4 5 4.4M15.6 7.6l5 4.4-5 4.4M13.6 4.4l-3.2 15.2" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3.2 4.8 6v6c0 4.2 3 7.4 7.2 8.8 4.2-1.4 7.2-4.6 7.2-8.8V6L12 3.2Z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/><path d="m8.8 12.2 2.2 2.2 4.2-4.6" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="i-loop" viewBox="0 0 24 24"><path d="M5 12a7 7 0 0 1 11.9-5M19 12a7 7 0 0 1-11.9 5" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round"/><path d="M17.4 3.4V7h-3.6M6.6 20.6V17h3.6" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="i-scale" viewBox="0 0 24 24"><path d="M12 3.6v16.8M6 20.4h12M4 8.4h16M12 5.6 4 8.4M12 5.6l8 2.8" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round"/><path d="M1.8 14.2a2.6 2.6 0 0 0 4.4 0L4 8.4ZM17.8 14.2a2.6 2.6 0 0 0 4.4 0L20 8.4Z" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linejoin="round"/></symbol>
+</defs></svg>
 <a class="skip" href="#main">Skip to content</a>
 
 <header class="bar">
@@ -52,33 +71,44 @@
   <nav aria-label="Primary">
     <a href="#thread">The thread</a>
     <a href="#flow">How it works</a>
-    <a href="https://github.com/ashugaev/pizdabol-ai">Source</a>
+    <a href="https://github.com/ashugaev/telegram-voice-diary-bot">Source</a>
+    <a class="lang" href="/ru/" hreflang="ru" lang="ru">RU</a>
   </nav>
-  <a class="btn btn-sm" href="https://t.me/pizdabol_ai_bot">Open in Telegram</a>
+  <a class="btn btn-sm" href="https://t.me/pizdabol_ai_bot"><svg class="ico" aria-hidden="true"><use href="#i-telegram"></use></svg>Open in Telegram</a>
 </header>
 
 <main id="main">
 
   <section class="hero">
     <div class="hero-copy">
-      <p class="eyebrow">voice note &rarr; notion row &rarr; honest reply</p>
+      <p class="eyebrow"><svg class="ico" aria-hidden="true"><use href="#i-mic"></use></svg> voice note <svg class="ico" aria-hidden="true"><use href="#i-notion"></use></svg> notion row <svg class="ico" aria-hidden="true"><use href="#i-flame"></use></svg> honest reply</p>
       <h1>Say it out loud. <br>It files the entry, <br>then it <em>argues</em> with you.</h1>
       <p class="lede">Pizdabol listens to your rambling voice notes, writes them into your Notion journal as clean, titled, tagged entries — and then says the thing your diary never says back.</p>
       <div class="cta-row">
-        <a class="btn" href="https://t.me/pizdabol_ai_bot">Open in Telegram</a>
-        <a class="btn btn-ghost" href="https://github.com/ashugaev/pizdabol-ai">Run your own copy</a>
+        <a class="btn" href="https://t.me/pizdabol_ai_bot"><svg class="ico" aria-hidden="true"><use href="#i-telegram"></use></svg>Open in Telegram</a>
+        <a class="btn btn-ghost" href="https://github.com/ashugaev/telegram-voice-diary-bot"><svg class="ico" aria-hidden="true"><use href="#i-code"></use></svg>Run your own copy</a>
       </div>
-      <p class="fineprint">Your keys, your Notion database, your server. Nothing sits in the middle.</p>
+      <p class="fineprint">Every entry lands in your own Notion. We store nothing — there is no server of ours in the middle.</p>
     </div>
 
     <div class="hero-thread" id="thread">
-      <div class="thread" role="img" aria-label="Chat transcript: a 47-second voice note is transcribed into a Notion diary entry titled Ninth attempt at a morning, the bot replies with a blunt observation, the author asks it to stay blunt, and the entry is saved.">
-        <p class="thread-day">Tuesday, 23:41</p>
+      <div class="tg" role="img" aria-label="Telegram chat: a 47-second voice note becomes a Notion diary entry titled Ninth attempt at a morning, the bot answers bluntly, the author asks it to stay blunt, and the bot updates what it remembers.">
+        <header class="tg-head">
+          <img class="tg-ava" src="/avatar.svg" width="40" height="40" alt="" aria-hidden="true">
+          <div>
+            <p class="tg-name">Pizdabol</p>
+            <p class="tg-status"><span class="s-online">online</span><span class="s-typing">typing…</span></p>
+          </div>
+          <span class="tg-dots" aria-hidden="true">⋮</span>
+        </header>
 
-        <article class="msg msg-out" style="--i:0">
-          <div class="voice">
-            <span class="play" aria-hidden="true"></span>
-            <svg class="wave" viewBox="0 0 220 32" aria-hidden="true" preserveAspectRatio="none">
+        <div class="tg-body">
+          <p class="tg-day">Tuesday</p>
+
+          <div class="slot" style="--i:0"><article class="msg out">
+            <div class="voice">
+              <span class="play" aria-hidden="true"></span>
+              <svg class="wave" viewBox="0 0 220 32" aria-hidden="true" preserveAspectRatio="none">
               <g fill="currentColor">
                 <rect x="0"   y="12" width="3" height="8"  rx="1.5"/><rect x="7"   y="8"  width="3" height="16" rx="1.5"/>
                 <rect x="14"  y="4"  width="3" height="24" rx="1.5"/><rect x="21"  y="10" width="3" height="12" rx="1.5"/>
@@ -97,33 +127,55 @@
                 <rect x="196" y="10" width="3" height="12" rx="1.5"/><rect x="203" y="13" width="3" height="6"  rx="1.5"/>
               </g>
             </svg>
-            <span class="dur">0:47</span>
-          </div>
-        </article>
+              <span class="dur">0:47</span>
+            </div>
+            <p class="meta">23:41 <span class="checks" aria-hidden="true">✓✓</span></p>
+          </article></div>
 
-        <article class="msg msg-in card" style="--i:1">
-          <p class="card-kicker">Draft entry</p>
-          <h2 class="card-title">Ninth attempt at a morning</h2>
-          <p class="card-body">Said nine again, started at noon again. Spent the evening being productive about things nobody asked for, and now it's midnight and I'm annoyed at myself in the exact same words as Sunday.</p>
-          <p class="tags"><span>#routine</span><span>#work</span><span>#self</span></p>
-          <p class="btns" aria-hidden="true"><span>Format</span><span>Title</span><span>Tags</span><span>Date</span><span class="save">Save</span></p>
-        </article>
+          <div class="slot" style="--i:1"><div class="stack">
+            <article class="msg in card">
+              <p class="card-kicker">Draft entry</p>
+              <h2 class="card-title">Ninth attempt at a morning</h2>
+              <p class="card-body">Said nine again, started at noon again. Spent the evening being productive about things nobody asked for, and now it's midnight and I'm annoyed at myself in the exact same words as Sunday.</p>
+              <p class="tags"><span>#routine</span><span>#work</span><span>#self</span></p>
+              <p class="meta">23:41</p>
+              <p class="kbd" aria-hidden="true"><span>Format</span><span>Title</span><span>Tags</span><span>Date</span><span class="save">Save</span></p>
+            </article>
+            <p class="typing t1" aria-hidden="true"><span></span><span></span><span></span></p>
+          </div></div>
 
-        <article class="msg msg-in roast" style="--i:2">
-          <p class="roast-kicker">🔥 Roast</p>
-          <p>You don't have a morning problem, you have a 1 a.m. problem. Third note this month with the same sentence in it. Want me to start counting out loud?</p>
-        </article>
+          <div class="slot" style="--i:2"><div class="stack">
+            <article class="msg in roast">
+              <p class="roast-kicker">🔥 Roast</p>
+              <p>You don't have a morning problem, you have a 1 a.m. problem. Third note this month with the same sentence in it. Want me to start counting out loud?</p>
+              <p class="meta">23:42</p>
+            </article>
+            <p class="typing t2" aria-hidden="true"><span></span><span></span><span></span></p>
+          </div></div>
 
-        <article class="msg msg-out text" style="--i:3">
-          <p>counting is fine. just don't be nice about it</p>
-        </article>
+          <div class="slot" style="--i:3"><article class="msg out text">
+            <p>counting is fine. just don't be nice about it</p>
+            <p class="meta">23:42 <span class="checks" aria-hidden="true">✓✓</span></p>
+          </article></div>
 
-        <article class="msg msg-in roast" style="--i:4">
-          <p class="roast-kicker">Rule saved</p>
-          <p>Noted: no cushioning. Day one of nine-a.m. starts is tomorrow, and I'll ask.</p>
-        </article>
+          <div class="slot" style="--i:4"><div class="stack">
+            <article class="msg in memo">
+              <p class="memo-kicker">🧠 Memory updated</p>
+              <p class="memo-line"><b>About you:</b> evening productivity is avoidance, not output.</p>
+              <p class="memo-line"><b>Rule:</b> no cushioning — say it straight.</p>
+              <p class="meta">23:42</p>
+            </article>
+            <p class="typing t3" aria-hidden="true"><span></span><span></span><span></span></p>
+          </div></div>
 
-        <p class="receipt" style="--i:5"><span class="tick" aria-hidden="true">✓</span> Saved to Notion — Diary / 26 Aug 2026</p>
+          <div class="slot" style="--i:5"><p class="receipt"><svg class="ico n-mark" aria-hidden="true"><use href="#i-notion"></use></svg> Saved to Notion — Diary / 26 Aug 2026</p></div>
+        </div>
+
+        <footer class="tg-input" aria-hidden="true">
+          <span class="tg-clip">🖇</span>
+          <span class="tg-ph">Message</span>
+          <span class="tg-mic"></span>
+        </footer>
       </div>
     </div>
   </section>
@@ -133,22 +185,22 @@
     <ol class="steps">
       <li>
         <span class="step-n">01</span>
-        <h3>You talk</h3>
+        <h3><svg class="ico ico-step" aria-hidden="true"><use href="#i-mic"></use></svg>You talk</h3>
         <p>Voice or text, any length, no format to follow. Send it the way you'd send it to a friend at midnight.</p>
       </li>
       <li>
         <span class="step-n">02</span>
-        <h3>It writes</h3>
+        <h3><svg class="ico ico-step" aria-hidden="true"><use href="#i-wand"></use></svg>It writes</h3>
         <p>Transcribed, cleaned into readable prose, given a title, tags, and today's date. The original wording stays available.</p>
       </li>
       <li>
         <span class="step-n">03</span>
-        <h3>You edit</h3>
+        <h3><svg class="ico ico-step" aria-hidden="true"><use href="#i-sliders"></use></svg>You edit</h3>
         <p>Change the title, retag, move the date, reformat the text. Nothing reaches Notion until you press Save.</p>
       </li>
       <li>
         <span class="step-n">04</span>
-        <h3>It files</h3>
+        <h3><svg class="ico ico-step" aria-hidden="true"><use href="#i-notion"></use></svg>It files</h3>
         <p>One row in your journal database. No duplicates, no orphan pages, no scattered inbox to clean up later.</p>
       </li>
     </ol>
@@ -158,22 +210,52 @@
     <h2 class="section-title">It keeps notes on you</h2>
     <dl class="spec">
       <div>
-        <dt>Roast</dt>
+        <dt><svg class="ico" aria-hidden="true"><use href="#i-flame"></use></svg>Roast</dt>
         <dd>An honest read on the entry you just sent. Reply to it and the conversation keeps going — deeper, with the rest of your diary in the room.</dd>
       </div>
       <div>
-        <dt>Profile</dt>
+        <dt><svg class="ico" aria-hidden="true"><use href="#i-brain"></use></svg>Profile</dt>
         <dd>A private knowledge base about you, built from your own notes without you filling in a single form. It posts a short line whenever it learns something new.</dd>
       </div>
       <div>
-        <dt>Rules</dt>
+        <dt><svg class="ico" aria-hidden="true"><use href="#i-rules"></use></svg>Rules</dt>
         <dd>Tell it to stop moralising, to answer in one line, to never mention your ex. It remembers, and the rules live on a Notion page you can edit by hand.</dd>
       </div>
       <div>
-        <dt>Recaps</dt>
+        <dt><svg class="ico" aria-hidden="true"><use href="#i-notion"></use></svg>Storage</dt>
+        <dd>Entries, profile, and rules all live in your Notion. We keep nothing: no copies of your notes, no accounts, no servers of ours holding your diary.</dd>
+      </div>
+      <div>
+        <dt><svg class="ico" aria-hidden="true"><use href="#i-calendar"></use></svg>Recaps</dt>
         <dd>A daily summary lands on its own. Ask for the weekly report whenever you want the longer view.</dd>
       </div>
     </dl>
+  </section>
+
+  <section class="cases">
+    <h2 class="section-title">What people actually use it for</h2>
+    <ul class="case-list">
+      <li>
+        <svg class="ico ico-lg" aria-hidden="true"><use href="#i-loop"></use></svg>
+        <h3>Break the loop you are stuck in</h3>
+        <p>Say the story you keep telling yourself out loud. It names the distortion instead of nodding along, and it has your last month of notes to prove the pattern.</p>
+      </li>
+      <li>
+        <svg class="ico ico-lg" aria-hidden="true"><use href="#i-scale"></use></svg>
+        <h3>Think a decision through</h3>
+        <p>Talk the call out before you make it. The entry keeps what you actually weighed, so the next you can check the reasoning instead of the outcome.</p>
+      </li>
+      <li>
+        <svg class="ico ico-lg" aria-hidden="true"><use href="#i-brain"></use></svg>
+        <h3>Dump the 1 a.m. spiral</h3>
+        <p>Rant in, clean entry out. The thought stops circling once it is written down, titled, and filed somewhere you can find it.</p>
+      </li>
+      <li>
+        <svg class="ico ico-lg" aria-hidden="true"><use href="#i-calendar"></use></svg>
+        <h3>Review a week without homework</h3>
+        <p>No Sunday ritual to keep up. The recap is already written from what you said during the week.</p>
+      </li>
+    </ul>
   </section>
 
   <section class="cmds">
@@ -189,10 +271,10 @@
 
   <section class="own">
     <h2 class="section-title">Run it yourself</h2>
-    <p class="own-copy">Open source Python. Your Telegram token, your OpenAI key, your Notion database, on a box you control. Clone it, fill in <code>.env</code>, start the process — that's the whole install.</p>
+    <p class="own-copy">Open source Python. Your Telegram token, your OpenAI key, your Notion database, on a box you control. Your notes never touch our infrastructure, because there isn't any. Clone it, fill in <code>.env</code>, start the process — that's the whole install.</p>
     <div class="cta-row">
-      <a class="btn" href="https://t.me/pizdabol_ai_bot">Open in Telegram</a>
-      <a class="btn btn-ghost" href="https://github.com/ashugaev/pizdabol-ai">Read the source</a>
+      <a class="btn" href="https://t.me/pizdabol_ai_bot"><svg class="ico" aria-hidden="true"><use href="#i-telegram"></use></svg>Open in Telegram</a>
+      <a class="btn btn-ghost" href="https://github.com/ashugaev/telegram-voice-diary-bot"><svg class="ico" aria-hidden="true"><use href="#i-code"></use></svg>Read the source</a>
     </div>
   </section>
 
@@ -201,7 +283,7 @@
 <footer class="foot">
   <p class="wordmark">pizdabol<span class="dot">.</span></p>
   <p>A diary that talks back. Built for the Notion Journal.</p>
-  <p><a href="https://github.com/ashugaev/pizdabol-ai">GitHub</a> · <a href="https://t.me/pizdabol_ai_bot">Telegram</a></p>
+  <p><a href="https://github.com/ashugaev/telegram-voice-diary-bot"><svg class="ico" aria-hidden="true"><use href="#i-code"></use></svg>GitHub</a> · <a href="https://t.me/pizdabol_ai_bot"><svg class="ico" aria-hidden="true"><use href="#i-telegram"></use></svg>Telegram</a> · <a href="/ru/" hreflang="ru" lang="ru">Русский</a></p>
 </footer>
 </body>
 </html>

@@ -1,0 +1,178 @@
+- generic [active] [ref=f5e1]:
+  - link "К содержимому" [ref=f5e2] [cursor=pointer]:
+    - /url: "#main"
+  - banner [ref=f5e3]:
+    - link "pizdabol." [ref=f5e4] [cursor=pointer]:
+      - /url: /ru/
+    - navigation "Основная" [ref=f5e5]:
+      - link "Тред" [ref=f5e6] [cursor=pointer]:
+        - /url: "#thread"
+      - link "Как работает" [ref=f5e7] [cursor=pointer]:
+        - /url: "#flow"
+      - link "Код" [ref=f5e8] [cursor=pointer]:
+        - /url: https://github.com/ashugaev/telegram-voice-diary-bot
+      - link "EN" [ref=f5e9] [cursor=pointer]:
+        - /url: /
+    - link "Открыть в Telegram" [ref=f5e10] [cursor=pointer]:
+      - /url: https://t.me/pizdabol_ai_bot
+  - main [ref=f5e13]:
+    - generic [ref=f5e14]:
+      - generic [ref=f5e15]:
+        - paragraph [ref=f5e16]: голосовое строка в notion честный ответ
+        - heading [level=1] [ref=f5e23]:
+          - text: Скажи вслух. Он запишет — и
+          - emphasis [ref=f5e24]: поспорит
+          - text: .
+        - paragraph [ref=f5e25]: Pizdabol слушает сбивчивые голосовые, складывает их в дневник Notion — с заголовком, тегами и датой — и говорит то, о чём дневник обычно молчит.
+        - generic [ref=f5e26]:
+          - link "Открыть в Telegram" [ref=f5e27] [cursor=pointer]:
+            - /url: https://t.me/pizdabol_ai_bot
+          - link "Поднять свою копию" [ref=f5e30] [cursor=pointer]:
+            - /url: https://github.com/ashugaev/telegram-voice-diary-bot
+        - paragraph [ref=f5e33]: Каждая запись ложится в твой Notion. Мы не храним ничего — нашего сервера посередине нет.
+      - 'img "Чат в Telegram: голосовое на 47 секунд превращается в запись дневника «Девятая попытка проснуться», бот отвечает прямо, автор просит не смягчать, бот обновляет память о нём." [ref=f5e35]':
+        - generic [ref=f5e36]:
+          - generic [ref=f5e38]:
+            - paragraph [ref=f5e39]: Pizdabol
+            - paragraph [ref=f5e40]:
+              - generic [ref=f5e41]: в сети
+              - generic [ref=f5e42]: печатает…
+          - generic [ref=f5e43]: ⋮
+        - generic [ref=f5e44]:
+          - paragraph [ref=f5e45]: Вторник
+          - article [ref=f5e47]:
+            - generic [ref=f5e48]: 0:47
+            - paragraph [ref=f5e83]: 23:41 ✓✓
+          - generic:
+            - generic:
+              - article [ref=f5e84]:
+                - paragraph [ref=f5e85]: Черновик записи
+                - heading "Девятая попытка проснуться" [level=2] [ref=f5e86]
+                - paragraph [ref=f5e87]: Опять сказал в девять, опять начал в полдень. Вечер потратил на продуктивность, о которой никто не просил, и вот полночь, и я злюсь на себя теми же словами, что в воскресенье.
+                - paragraph [ref=f5e88]:
+                  - generic [ref=f5e89]: "#режим"
+                  - generic [ref=f5e90]: "#работа"
+                  - generic [ref=f5e91]: "#я"
+                - paragraph [ref=f5e92]: 23:41
+                - paragraph [ref=f5e93]:
+                  - generic [ref=f5e94]: Формат
+                  - generic [ref=f5e95]: Заголовок
+                  - generic [ref=f5e96]: Теги
+                  - generic [ref=f5e97]: Дата
+                  - generic [ref=f5e98]: Сохранить
+              - paragraph [ref=f5e99]
+          - generic:
+            - generic:
+              - article [ref=f5e103]:
+                - paragraph [ref=f5e104]: 🔥 Роаст
+                - paragraph [ref=f5e105]: У тебя не проблема с утром, у тебя проблема с часом ночи. Третья заметка за месяц с той же фразой. Начать считать вслух?
+                - paragraph [ref=f5e106]: 23:42
+              - paragraph [ref=f5e107]
+          - article [ref=f5e112]:
+            - paragraph [ref=f5e113]: считай. только не жалей меня
+            - paragraph [ref=f5e114]: 23:42 ✓✓
+          - generic:
+            - generic:
+              - article [ref=f5e115]:
+                - paragraph [ref=f5e116]: 🧠 Память обновлена
+                - paragraph [ref=f5e117]: "О тебе: вечерняя продуктивность — это избегание, а не результат."
+                - paragraph [ref=f5e118]: "Правило: без смягчений — говорить прямо."
+                - paragraph [ref=f5e119]: 23:42
+              - paragraph [ref=f5e120]
+          - paragraph [ref=f5e125]: Сохранено в Notion — Дневник / 26 авг 2026
+        - generic [ref=f5e128]:
+          - generic [ref=f5e129]: 🖇
+          - generic [ref=f5e130]: Сообщение
+    - generic [ref=f5e132]:
+      - heading "Заметка становится записью за четыре хода" [level=2] [ref=f5e133]
+      - list [ref=f5e134]:
+        - listitem [ref=f5e135]:
+          - generic [ref=f5e136]: "01"
+          - heading "Ты говоришь" [level=3] [ref=f5e137]
+          - paragraph [ref=f5e140]: Голосом или текстом, любой длины, без формата. Так же, как написал бы другу в полночь.
+        - listitem [ref=f5e141]:
+          - generic [ref=f5e142]: "02"
+          - heading "Он пишет" [level=3] [ref=f5e143]
+          - paragraph [ref=f5e146]: Расшифровка, читаемый текст, заголовок, теги и сегодняшняя дата. Оригинал остаётся под рукой.
+        - listitem [ref=f5e147]:
+          - generic [ref=f5e148]: "03"
+          - heading "Ты правишь" [level=3] [ref=f5e149]
+          - paragraph [ref=f5e152]: Заголовок, теги, дата, переформатировать текст. В Notion ничего не уходит, пока не нажмёшь Сохранить.
+        - listitem [ref=f5e153]:
+          - generic [ref=f5e154]: "04"
+          - heading "Он подшивает" [level=3] [ref=f5e155]
+          - paragraph [ref=f5e158]: Одна строка в твоей базе. Без дублей, без осиротевших страниц, без инбокса, который потом разгребать.
+    - generic [ref=f5e159]:
+      - heading "Он ведёт заметки о тебе" [level=2] [ref=f5e160]
+      - generic [ref=f5e161]:
+        - generic [ref=f5e162]:
+          - term [ref=f5e163]: Роаст
+          - definition [ref=f5e166]: Честный разбор только что отправленной записи. Ответь на него — и разговор пойдёт дальше, уже со всем дневником в комнате.
+        - generic [ref=f5e167]:
+          - term [ref=f5e168]: Профиль
+          - definition [ref=f5e171]: Приватная база знаний о тебе, собранная из твоих же заметок, без единой анкеты. Узнал новое — напишет одну строку.
+        - generic [ref=f5e172]:
+          - term [ref=f5e173]: Правила
+          - definition [ref=f5e176]: Скажи не морализировать, отвечать одной строкой, не вспоминать бывшую. Запомнит, а правила лежат на странице Notion, которую можно править руками.
+        - generic [ref=f5e177]:
+          - term [ref=f5e178]: Хранение
+          - definition [ref=f5e181]: "Записи, профиль и правила лежат в твоём Notion. Мы не храним ничего: ни копий заметок, ни аккаунтов, ни наших серверов с твоим дневником."
+        - generic [ref=f5e182]:
+          - term [ref=f5e183]: Сводки
+          - definition [ref=f5e186]: Дневная сводка приходит сама. Недельный отчёт — когда захочешь взгляд подлиннее.
+    - generic [ref=f5e187]:
+      - heading "Зачем им это на самом деле" [level=2] [ref=f5e188]
+      - list [ref=f5e189]:
+        - listitem [ref=f5e190]:
+          - heading "Выйти из своей же петли" [level=3] [ref=f5e193]
+          - paragraph [ref=f5e194]: Проговори историю, которую себе рассказываешь. Он назовёт искажение, а не покивает — и достанет заметки за месяц, где та же фраза.
+        - listitem [ref=f5e195]:
+          - heading "Продумать решение" [level=3] [ref=f5e198]
+          - paragraph [ref=f5e199]: Проговори выбор до того, как сделал. Запись сохранит, что ты реально взвешивал, — потом сверишь рассуждение, а не только исход.
+        - listitem [ref=f5e200]:
+          - heading "Слить ночную спираль" [level=3] [ref=f5e203]
+          - paragraph [ref=f5e204]: На входе поток, на выходе чистая запись. Мысль перестаёт крутиться, когда она названа и подшита.
+        - listitem [ref=f5e205]:
+          - heading "Разобрать неделю без домашки" [level=3] [ref=f5e208]
+          - paragraph [ref=f5e209]: Никаких воскресных ритуалов. Сводка уже написана из того, что ты говорил всю неделю.
+    - generic [ref=f5e210]:
+      - heading "Команды" [level=2] [ref=f5e211]
+      - list [ref=f5e212]:
+        - listitem [ref=f5e213]:
+          - code [ref=f5e214]: /weekly
+          - generic [ref=f5e215]: Недельный отчёт, прямо сейчас
+        - listitem [ref=f5e216]:
+          - code [ref=f5e217]: /stat
+          - generic [ref=f5e218]: Сколько минут наговорил, по дням и месяцам
+        - listitem [ref=f5e219]:
+          - code [ref=f5e220]: /memory
+          - generic [ref=f5e221]: Пересобрать профиль по всем сохранённым заметкам
+        - listitem [ref=f5e222]:
+          - code [ref=f5e223]: /rules
+          - generic [ref=f5e224]: Показать, что он усвоил о том, как с тобой говорить
+        - listitem [ref=f5e225]:
+          - code [ref=f5e226]: /help
+          - generic [ref=f5e227]: Команды и кнопки превью
+    - generic [ref=f5e228]:
+      - heading "Подними у себя" [level=2] [ref=f5e229]
+      - paragraph [ref=f5e230]:
+        - text: Открытый код на Python. Твой токен Telegram, твой ключ OpenAI, твоя база Notion, на твоей машине. Заметки не попадают на нашу инфраструктуру, потому что её нет. Клонируй, заполни
+        - code [ref=f5e231]: .env
+        - text: ", запусти процесс — вся установка."
+      - generic [ref=f5e232]:
+        - link "Открыть в Telegram" [ref=f5e233] [cursor=pointer]:
+          - /url: https://t.me/pizdabol_ai_bot
+        - link "Смотреть код" [ref=f5e236] [cursor=pointer]:
+          - /url: https://github.com/ashugaev/telegram-voice-diary-bot
+  - contentinfo [ref=f5e239]:
+    - paragraph [ref=f5e240]: pizdabol.
+    - paragraph [ref=f5e241]: Дневник, который отвечает. Сделан для Notion Journal.
+    - paragraph [ref=f5e242]:
+      - link "GitHub" [ref=f5e243] [cursor=pointer]:
+        - /url: https://github.com/ashugaev/telegram-voice-diary-bot
+      - text: ·
+      - link "Telegram" [ref=f5e246] [cursor=pointer]:
+        - /url: https://t.me/pizdabol_ai_bot
+      - text: ·
+      - link "English" [ref=f5e249] [cursor=pointer]:
+        - /url: /
