@@ -563,5 +563,4 @@ main { counter-reset: band; }
     animation: none !important;
     transition-duration: 0.001ms !important;
   }
-  .s-typing { display: none !important; }
 }
