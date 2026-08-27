@@ -69,13 +69,13 @@ h1, h2, h3 { font-family: var(--display); font-weight: 700; margin: 0; letter-sp
   font-family: var(--display); font-weight: 800; font-size: 20px;
   letter-spacing: -0.04em; text-decoration: none; margin: 0;
 }
-.wordmark .dot { color: var(--ochre); }
+.wordmark .dot { color: var(--ochre); transition: color 0.16s ease; }
 .bar nav { display: flex; gap: 22px; margin-left: auto; }
 .bar nav a {
   font-family: var(--mono); font-size: 12.5px; letter-spacing: 0.02em;
   color: var(--muted); text-decoration: none;
+  transition: color 0.16s ease;
 }
-.bar nav a { transition: color 0.16s ease; }
 .bar nav a.lang {
   color: var(--ochre); padding: 3px 9px; border-radius: 999px;
   box-shadow: inset 0 0 0 1px rgba(240, 180, 41, 0.35);
@@ -108,7 +108,6 @@ h1, h2, h3 { font-family: var(--display); font-weight: 700; margin: 0; letter-sp
   .wordmark:hover .dot { color: var(--cream); }
 }
 .btn:active { transform: translateY(0); box-shadow: none; }
-.wordmark .dot { transition: color 0.16s ease; }
 
 /* ---------- hero ---------- */
 
@@ -237,16 +236,16 @@ p, dd, .cmd-list span { text-wrap: pretty; }
     animation: grow 0.4s cubic-bezier(0.2, 0.7, 0.2, 1) both;
   }
   .s0 { animation-delay: 0.3s; }
-  .s-status { animation-delay: 0.9s, 3.1s; animation-name: grow, shrink; animation-duration: 0.4s, 0.3s; }
+  .s-status {
+    animation-delay: 0.9s, 3.1s; animation-name: grow, shrink;
+    animation-duration: 0.4s, 0.3s; animation-fill-mode: both, forwards;
+  }
   .s1 { animation-delay: 3.2s; }
   .s2 { animation-delay: 3.6s; }
   .s3 { animation-delay: 7.1s; }
   .s4 { animation-delay: 9.0s; }
   .s5 { animation-delay: 10.4s; }
   .s6 { animation-delay: 12.2s; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .s-status { display: none; }
 }
 
 .msg {
@@ -277,7 +276,6 @@ p, dd, .cmd-list span { text-wrap: pretty; }
 .msg > p:last-of-type::after { content: ""; display: inline-block; height: 1px; }
 .msg.in > p:last-of-type::after { width: 52px; }
 .msg.out > p:last-of-type::after { width: 74px; }
-.msg .card-tag::after { width: 52px; }
 .checks { width: 16px; height: 16px; color: var(--tg-check); vertical-align: -3px; }
 
 .voice { position: relative; display: grid; grid-template-columns: auto 1fr; column-gap: 11px; align-items: center; padding: 2px 0 1px; }
@@ -422,10 +420,7 @@ section { max-width: 1320px; margin: 0 auto; }
   display: grid; grid-template-columns: 104px minmax(0, 1fr); align-items: baseline; gap: 8px 18px;
   padding: 12px 0; border-bottom: 1px dashed var(--line);
 }
-.cmd-list code {
-  font-family: var(--mono); font-size: 13.5px; color: var(--ochre);
-  min-width: 96px;
-}
+.cmd-list code { font-family: var(--mono); font-size: 13.5px; color: var(--ochre); }
 .cmd-list span { color: var(--muted); font-size: 15px; }
 
 .own-copy { max-width: 60ch; color: var(--muted); margin: 0 0 28px; }
@@ -459,8 +454,8 @@ main { counter-reset: band; }
   align-items: start;
 }
 .band .section-title { margin-bottom: 0; max-width: 13ch; }
-.band .section-title::after {
-  counter-increment: band;
+.band-head { position: relative; counter-increment: band; }
+.band-head::after {
   content: counter(band, decimal-leading-zero);
   position: absolute; top: -3px; right: 0;
   font-family: var(--mono); font-size: 12px;
@@ -491,6 +486,7 @@ main { counter-reset: band; }
 }
 .slab .cmd-list { max-width: none; columns: 2; column-gap: 56px; }
 .slab .cmd-list li { break-inside: avoid; }
+.slab .cmd-list li:nth-child(3), .slab .cmd-list li:last-child { border-bottom: 0; }
 
 /* ---------- use cases ---------- */
 
@@ -528,7 +524,7 @@ main { counter-reset: band; }
   .hero { grid-template-columns: minmax(0, 1fr); }
   .band { grid-template-columns: minmax(0, 1fr); }
   .band .section-title { margin-bottom: clamp(20px, 3vw, 32px); max-width: 20ch; }
-  .band .section-title::after { position: static; display: block; margin-top: 8px; }
+  .band-head::after { position: static; display: block; margin-top: 8px; }
   .faq .band-head { position: static; }
   .slab-in { grid-template-columns: minmax(0, 1fr); }
   .slab .cmd-list { columns: 1; }
@@ -559,6 +555,7 @@ main { counter-reset: band; }
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
+  .s-status { display: none; }
   *, *::before, *::after {
     animation: none !important;
     transition-duration: 0.001ms !important;
