@@ -48,7 +48,7 @@ Capabilities loaded by description match. Source: [.claude/skills/](.claude/skil
 - Do not run `make dev`, `make deploy`, or remote `ssh` commands unless the user explicitly asks. They stop/restart the VPS bot.
 - Codex Stop hook may run local syntax/frontmatter checks only. Do not add hooks that push, deploy, call live APIs, or mutate production state.
 - Keep `.env.example`, `README.md`, tests, and code in sync when env vars, Notion schema, commands, or user-visible bot flows change.
-- Preserve diary behavior unless the task says otherwise: original transcription/text is previewed by default; Format changes only draft text; Save writes one Notion row.
+- Preserve diary behavior unless the task says otherwise: formatted text is previewed by default with an Original toggle; formatting changes only draft text; Save writes one Notion row.
 - For Notion schema changes, update constants in `services/notion.py`, schema tests, duplicate tests when relevant, and README database docs.
 - For OpenAI formatting changes, keep JSON-only responses, Russian diary prompt behavior, long-transcription metadata-only path, and fallback tests.
 - For state changes, use temp paths in tests; never read or mutate `.data/message_state.json` during tests.
