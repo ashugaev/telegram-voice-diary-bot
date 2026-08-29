@@ -341,14 +341,14 @@ class CreatePreviewTests(unittest.IsolatedAsyncioTestCase):
         edit = fake_context.bot.edits[0]
         self.assertEqual(edit["chat_id"], 123)
         self.assertEqual(edit["message_id"], 20)
-        self.assertEqual(edit["text"], bot._preview_text("Title", "raw transcription", ["work"], entry_date))
+        self.assertEqual(edit["text"], bot._preview_text("Title", "Body", ["work"], entry_date))
         self.assertEqual(edit["parse_mode"], "HTML")
         self.assertEqual(fake_state_store.marked_drafted, [("123:10", "entry-1")])
         self.assertEqual(fake_state_store.saved_drafts[0]["preview_msg_id"], 20)
         self.assertEqual(fake_state_store.saved_drafts[0]["entry_date"], entry_date)
         self.assertEqual(fake_state_store.saved_drafts[0]["raw_text"], "raw transcription")
         self.assertEqual(fake_state_store.saved_drafts[0]["formatted_text"], "Body")
-        self.assertFalse(fake_state_store.saved_drafts[0]["formatted"])
+        self.assertTrue(fake_state_store.saved_drafts[0]["formatted"])
         self.assertEqual(
             fake_state_store.saved_drafts[0]["metadata"]["source_message_url"],
             "https://t.me/diary_bot?start=src_123_10",
@@ -396,7 +396,8 @@ class CreatePreviewTests(unittest.IsolatedAsyncioTestCase):
         source_message = SimpleNamespace(chat_id=123, message_id=10)
         processing_message = SimpleNamespace(chat_id=123, message_id=20)
         long_text = "x" * (bot.TELEGRAM_MESSAGE_LIMIT + 500)
-        fake_formatter = AsyncMock(return_value=("Title", "Formatted", []))
+        long_formatted = "y" * (bot.TELEGRAM_MESSAGE_LIMIT + 500)
+        fake_formatter = AsyncMock(return_value=("Title", long_formatted, []))
 
         with (
             patch.object(bot, "format_entry", new=fake_formatter),
@@ -423,10 +424,48 @@ class CreatePreviewTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Preview truncated", edit_text)
         self.assertIn("Page 1/", edit_text)
         self.assertEqual(callback_data[:2], ["preview_page:entry-long:0", "preview_page:entry-long:1"])
-        self.assertEqual(fake_state_store.saved_drafts[0]["text"], long_text)
+        self.assertEqual(fake_state_store.saved_drafts[0]["text"], long_formatted)
         self.assertEqual(fake_state_store.saved_drafts[0]["raw_text"], long_text)
-        self.assertEqual(fake_state_store.saved_drafts[0]["formatted_text"], "Formatted")
+        self.assertEqual(fake_state_store.saved_drafts[0]["formatted_text"], long_formatted)
         self.assertEqual(fake_state_store.saved_drafts[0]["preview_page"], 0)
+
+    async def test_create_preview_applies_formatted_text_by_default(self):
+        fake_state_store = FakeStateStore()
+        fake_context = SimpleNamespace(
+            bot=FakeEditBot(),
+            user_data={},
+            application=FakeApplication(close_coroutines=True),
+        )
+        source_message = SimpleNamespace(chat_id=123, message_id=10)
+        processing_message = SimpleNamespace(chat_id=123, message_id=20)
+        fake_formatter = AsyncMock(return_value=("Title", "formatted body", []))
+
+        with (
+            patch.object(bot, "format_entry", new=fake_formatter),
+            patch.object(bot, "_new_entry_id", return_value="entry-fmt"),
+            patch.object(bot, "state_store", fake_state_store),
+            patch.object(bot, "_update_profile_points", new=AsyncMock()),
+        ):
+            await bot._create_preview(
+                source_message,
+                fake_context,
+                "raw transcription",
+                message_key="123:10",
+                preview_message=processing_message,
+            )
+
+        draft = fake_state_store.saved_drafts[0]
+        self.assertEqual(draft["text"], "formatted body")
+        self.assertEqual(draft["raw_text"], "raw transcription")
+        self.assertTrue(draft["formatted"])
+        keyboard = fake_context.bot.edits[0]["reply_markup"]
+        callback_data = [
+            button.callback_data
+            for row in keyboard.inline_keyboard
+            for button in row
+        ]
+        self.assertIn("unformat:entry-fmt", callback_data)
+        self.assertNotIn("format:entry-fmt", callback_data)
 
     async def test_create_preview_shows_format_when_formatted_text_matches_raw_text(self):
         fake_state_store = FakeStateStore()

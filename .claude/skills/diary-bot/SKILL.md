@@ -27,13 +27,13 @@ Use this as project memory for implementation and validation.
 
 ## Behavior invariants
 
-- Preview original transcription or typed text by default.
-- Formatter-generated title and tags apply before save; formatted body applies only after the Format button.
+- Preview formatted text by default; Original button restores raw transcription or typed text.
+- Formatter-generated title and tags apply before save.
 - `Daily` tag is always present in rendered and saved entries.
 - Date picker allows today plus previous 6 days.
 - Duplicate voice notes use Telegram voice facts; duplicate text notes use exact source-text hash.
 - Notion save retries transient errors and verifies created page before marking saved.
-- Long transcriptions use metadata-only formatting and keep original text.
+- Long transcriptions use metadata-only formatting and keep original text (no Original toggle).
 - `/memory` rebuild is two-step (focus prompt, then confirm), sequential, single-flight, and persists points after every note.
 - Both memory stores (author profile, behavior rules) are accumulated `MemoryItem` lists edited only through `memory.apply_ops`: the model returns `create`/`modify`/`delete` operations addressing an item id, never a rewritten list. An unknown id is a logged no-op. Ids persist in state; list size and item length are guided in the prompt, never trimmed in code.
 - The profile only shrinks when a fact went false or folds into a duplicate. Never drop a fact for being weak, small, or absent from the current note.

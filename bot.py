@@ -1235,14 +1235,16 @@ async def _create_preview(
     entry_date = _default_entry_date()
     record = state_store.get_message(message_key) if message_key else None
     title, formatted_text, tags = await format_entry(source_text)
-    text = source_text
+    formatted = bool(formatted_text) and formatted_text != source_text
+    text = formatted_text if formatted else source_text
 
     preview = _render_preview(title, text, tags, entry_date)
     keyboard = _preview_keyboard(
         entry_id,
         highlighted=False,
         entry_date=entry_date,
-        show_format=_can_show_format(formatted_text),
+        show_format=_can_show_format(formatted_text, formatted),
+        show_original=formatted,
         show_pagination=preview.truncated,
         preview_page=preview.page,
         page_count=preview.page_count,
@@ -1271,7 +1273,7 @@ async def _create_preview(
         "tags": tags,
         "raw_text": source_text,
         "formatted_text": formatted_text,
-        "formatted": False,
+        "formatted": formatted,
         "entry_date": entry_date,
         "metadata": _entry_metadata(record, source_text, bot_username=_bot_username(context)),
         "allow_duplicate": bool(record and record.get("allow_duplicate")),
