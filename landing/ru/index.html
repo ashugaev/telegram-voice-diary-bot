@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pizdabol — телеграм-бот голосового дневника для Notion</title>
-<meta name="description" content="Отправь голосовое в Telegram: расшифровка, заголовок, теги и одна строка в твоём дневнике Notion, а следом честный ответ от бота, который помнит все заметки. Открытый код, свой сервер, на нашей стороне не хранится ничего.">
+<title>Pizdabol — голосовой дневник в Telegram, который пишется в Notion</title>
+<meta name="description" content="Наговори голосовое в Telegram — получишь готовую запись в дневнике Notion: заголовок, теги, дата. Бот отвечает по делу и сам запоминает важное о тебе. Открытый код, свой сервер.">
 <link rel="canonical" href="https://pizdabol.app/ru/">
 <link rel="alternate" hreflang="en" href="https://pizdabol.app/">
 <link rel="alternate" hreflang="ru" href="https://pizdabol.app/ru/">
@@ -18,17 +18,17 @@
 <meta property="og:site_name" content="Pizdabol">
 <meta property="og:locale" content="ru_RU">
 <meta property="og:url" content="https://pizdabol.app/ru/">
-<meta property="og:title" content="Pizdabol — телеграм-бот голосового дневника для Notion">
-<meta property="og:description" content="Голосовые в Telegram становятся строками с заголовком и тегами в твоём дневнике Notion — и бот отвечает честно.">
+<meta property="og:title" content="Pizdabol — голосовой дневник в Telegram, который пишется в Notion">
+<meta property="og:description" content="Наговорил в Telegram — в твоём Notion появилась готовая запись, а в ответ прилетел честный разбор.">
 <meta property="og:image" content="https://pizdabol.app/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Заголовок лендинга Pizdabol: скажи вслух, он запишет и поспорит">
+<meta property="og:image:alt" content="Заголовок лендинга Pizdabol: дневник, с которым можно поговорить">
 <meta property="og:locale:alternate" content="en_US">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:image:alt" content="Заголовок лендинга Pizdabol: скажи вслух, он запишет и поспорит">
-<meta name="twitter:title" content="Pizdabol — телеграм-бот голосового дневника для Notion">
-<meta name="twitter:description" content="Голосовые в Telegram становятся строками с заголовком и тегами в твоём дневнике Notion — и бот отвечает честно.">
+<meta name="twitter:image:alt" content="Заголовок лендинга Pizdabol: дневник, с которым можно поговорить">
+<meta name="twitter:title" content="Pizdabol — голосовой дневник в Telegram, который пишется в Notion">
+<meta name="twitter:description" content="Наговорил в Telegram — в твоём Notion появилась готовая запись, а в ответ прилетел честный разбор.">
 <meta name="twitter:image" content="https://pizdabol.app/og.png">
 
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -46,7 +46,7 @@
   "operatingSystem": "Telegram",
   "url": "https://pizdabol.app/ru/",
   "inLanguage": "ru",
-  "description": "Telegram-бот, который превращает голосовые заметки в записи дневника в Notion и честно комментирует прочитанное.",
+  "description": "Телеграм-бот: голосовые заметки превращаются в готовые записи дневника в Notion, а бот сам помнит, что о тебе важно.",
   "offers": {
     "@type": "Offer",
     "price": "0",
@@ -70,18 +70,18 @@
   "mainEntity": [
     {
       "@type": "Question",
-      "name": "Где хранится дневник?",
+      "name": "Где лежит дневник?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "В твоей базе Notion. На своей копии путь такой: Telegram, твоя машина, твой Notion, и больше нигде ничего не остаётся. Публичный демо-бот крутится на чужой машине и держит запись ровно столько, сколько нужно, чтобы записать строку в Notion."
+        "text": "В твоей базе Notion. На своей копии путь короткий: Telegram, твоя машина, твой Notion — по дороге ничего не оседает. Публичный бот общий: держит запись ровно до того момента, пока не создаст строку."
       }
     },
     {
       "@type": "Question",
-      "name": "Нужно ли что-то печатать?",
+      "name": "Обязательно печатать?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Нет. Отправь голосовое — расшифровка, заголовок, теги и дата появятся сами. Текстовые сообщения работают так же, если писать удобнее."
+        "text": "Нет. Отправляешь голосовое — расшифровка, заголовок, теги и дата приходят готовыми. Текстом тоже можно, если так привычнее."
       }
     },
     {
@@ -89,23 +89,23 @@
       "name": "Сколько это стоит?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Код бесплатный и открытый. Платишь только за свой OpenAI и за машину, на которой запускаешь бота."
+        "text": "Код бесплатный и открытый. Платишь только за свой OpenAI и за машину, на которой всё крутится."
       }
     },
     {
       "@type": "Question",
-      "name": "Можно изменить манеру общения?",
+      "name": "Можно поменять манеру общения?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Да, разговором. Скажи в чат «не морализируй» или «отвечай одной строкой» — он перепишет свои правила и сообщит, что изменил. Страница правил в Notion есть, если захочешь почитать."
+        "text": "Да, достаточно сказать. «Отвечай одной строкой». «Без морали». Он сохранит это правилом и сообщит, что изменил."
       }
     },
     {
       "@type": "Question",
-      "name": "Подходит ли к шаблону Notion Journal?",
+      "name": "Подойдёт к шаблону Notion Journal?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Да. Одна запись — одна строка с заголовком, текстом, тегами и датой, так что вьюхи и фильтры журнала продолжают работать."
+        "text": "Да. Одна запись — одна строка: заголовок, текст, теги, дата. Твои вьюхи и фильтры продолжают работать."
       }
     }
   ]
@@ -148,14 +148,14 @@
 
   <section class="hero">
     <div class="hero-copy">
-      <p class="eyebrow"><svg class="ico" aria-hidden="true"><use href="#i-mic"></use></svg> голосовое <svg class="ico" aria-hidden="true"><use href="#i-notion"></use></svg> строка в notion <svg class="ico" aria-hidden="true"><use href="#i-flame"></use></svg> честный ответ</p>
-      <h1>Скажи вслух. Он запишет — и <em>поспорит</em>.</h1>
-      <p class="lede">Pizdabol слушает сбивчивые голосовые, складывает их в дневник Notion — с заголовком, тегами и датой — и говорит то, о чём дневник обычно молчит.</p>
+      <p class="eyebrow"><svg class="ico" aria-hidden="true"><use href="#i-mic"></use></svg> голосовое <svg class="ico" aria-hidden="true"><use href="#i-notion"></use></svg> запись в notion <svg class="ico" aria-hidden="true"><use href="#i-flame"></use></svg> честный ответ</p>
+      <h1>Дневник, с которым говорят. Он <em>узнаёт</em> тебя сам.</h1>
+      <p class="lede">Наговариваешь голосовое в Telegram — обратно приходит готовая запись в твоём дневнике Notion: заголовок, теги, дата. А следом бот отвечает так, будто прочитал всё, что ты уже наговорил.</p>
       <div class="cta-row">
         <a class="btn" href="https://t.me/pizdabol_ai_bot"><svg class="ico" aria-hidden="true"><use href="#i-telegram"></use></svg>Открыть в Telegram</a>
-        <a class="btn btn-ghost" href="https://github.com/ashugaev/telegram-voice-diary-bot"><svg class="ico" aria-hidden="true"><use href="#i-code"></use></svg>Поднять свою копию</a>
+        <a class="btn btn-ghost" href="https://github.com/ashugaev/telegram-voice-diary-bot"><svg class="ico" aria-hidden="true"><use href="#i-code"></use></svg>Поднять свой</a>
       </div>
-      <p class="fineprint">Своя копия: запись идёт с твоей машины прямо в твой Notion, посередине ничего нашего. Демо-бот — общий инстанс: попробуй на нём, потом подними свой.</p>
+      <p class="fineprint">Своя копия шлёт заметки с твоей машины прямо в твой Notion, больше никуда. Публичный бот — общая демка: начни с неё, переедешь, когда понравится.</p>
     </div>
 
     <div class="hero-thread" id="thread">
@@ -210,14 +210,14 @@
               <p class="quote"><b>Алексей</b><span><svg class="ico q-ico" aria-hidden="true"><use href="#i-mic"></use></svg>Голосовое сообщение</span></p>
               <p class="memo-head">🧠 Память обновлена</p>
               <p>О тебе:</p>
-              <p><span class="meta">23:42</span>+ вечернюю суету считает прогрессом, а потом винит утро.</p>
+              <p><span class="meta">23:42</span>+ вечернюю суету принимает за работу, а виноватым делает утро.</p>
             </article></div></div>
 
             <div class="slot s6"><div class="row in"><article class="msg in">
               <p class="quote"><b>Алексей</b><span>считай. только не жалей меня</span></p>
               <p class="memo-head">🧠 Память обновлена</p>
               <p>Правила:</p>
-              <p><span class="meta">23:43</span>+ без смягчений, говорить прямо.</p>
+              <p><span class="meta">23:43</span>+ говорить прямо, без смягчений.</p>
             </article></div></div>
           </div>
         </div>
@@ -232,53 +232,53 @@
   </section>
 
   <section class="flow" id="flow">
-    <h2 class="section-title">Ты говоришь. Дальше он сам.</h2>
+    <h2 class="section-title">Ты говоришь — остальное на нём.</h2>
     <ol class="steps">
       <li>
         <span class="step-n">01</span>
-        <h3><svg class="ico ico-step" aria-hidden="true"><use href="#i-mic"></use></svg>Скажи</h3>
-        <p>Голосом или текстом, любой длины, без формата. Ночное бормотание — это нормальный ввод.</p>
+        <h3><svg class="ico ico-step" aria-hidden="true"><use href="#i-mic"></use></svg>Наговори</h3>
+        <p>Голосом или текстом, хоть на десять минут. Ни структуры, ни тегов — причёсывать заранее ничего не надо.</p>
       </li>
       <li>
         <span class="step-n">02</span>
-        <h3><svg class="ico ico-step" aria-hidden="true"><use href="#i-notion"></use></svg>Он подшил</h3>
-        <p>Расшифровка, заголовок, теги, дата. Одно касание «Сохранить» — и запись стала строкой в твоём Notion.</p>
+        <h3><svg class="ico ico-step" aria-hidden="true"><use href="#i-notion"></use></svg>Он подошьёт</h3>
+        <p>Расшифрует, придумает заголовок, проставит теги и дату. Одно касание — и запись уже строка в твоём Notion.</p>
       </li>
       <li>
         <span class="step-n">03</span>
-        <h3><svg class="ico ico-step" aria-hidden="true"><use href="#i-flame"></use></svg>Ответь, если хочется</h3>
-        <p>Нажми «Роаст» ради честного разбора или просто ответь на запись. Остальное он делает сам.</p>
+        <h3><svg class="ico ico-step" aria-hidden="true"><use href="#i-flame"></use></svg>Продолжишь — или нет</h3>
+        <p>Нажми «Роаст» — прилетит честный разбор. Или просто ответь на запись, и разговор пойдёт дальше. Не станешь — заметка всё равно на месте.</p>
       </li>
     </ol>
   </section>
 
   <section class="learns">
-    <h2 class="section-title">Он сам ведёт свою память</h2>
-    <p class="lead-note">Вести нечего. Он сам решает, что о тебе стоит запомнить, а меняешь ты это разговором.</p>
+    <h2 class="section-title">Память он ведёт сам</h2>
+    <p class="lead-note">Поддерживать нечего: что о тебе стоит помнить, он решает сам, а поправить его можно словами.</p>
     <dl class="spec">
       <div>
         <dt><svg class="ico" aria-hidden="true"><use href="#i-profile"></use></svg>Учится сам</dt>
-        <dd>Читает каждую заметку и оставляет то, что важно о тебе. Ни анкет, ни системы тегов, заполнять нечего.</dd>
+        <dd>Каждая заметка делает картину точнее. Ни анкет, ни тегов, ни промптов — заполнять нечего.</dd>
       </div>
       <div>
-        <dt><svg class="ico" aria-hidden="true"><use href="#i-mic"></use></svg>Меняется голосом</dt>
-        <dd>Не нравится, что он запомнил или как разговаривает? Скажи прямо в чат — «не морализируй», «забудь это». Он перепишет свои правила и сообщит, что изменил.</dd>
+        <dt><svg class="ico" aria-hidden="true"><use href="#i-mic"></use></svg>Правится словами</dt>
+        <dd>«Не морализируй». «Забудь про это». Скажи в чат — он перепишет свои правила и одной строкой ответит, что поменял.</dd>
       </div>
       <div>
         <dt><svg class="ico" aria-hidden="true"><use href="#i-rules"></use></svg>Ничего не вести</dt>
-        <dd>Никаких файлов памяти и промптов. Профиль и правила лежат на своих страницах Notion — на случай, если захочешь заглянуть.</dd>
+        <dd>Никаких файлов памяти, за которыми надо следить. Профиль и правила лежат на страницах Notion — заглянуть можно, поддерживать не нужно.</dd>
       </div>
       <div>
         <dt><svg class="ico" aria-hidden="true"><use href="#i-flame"></use></svg>Роаст</dt>
-        <dd>Честный разбор только что отправленной записи. Ответь на него — и разговор пойдёт дальше, уже со всем дневником в комнате.</dd>
+        <dd>Честный разбор той записи, которую только что отправил. Ответишь — копнёт глубже, весь дневник у него уже перед глазами.</dd>
       </div>
       <div>
         <dt><svg class="ico" aria-hidden="true"><use href="#i-calendar"></use></svg>Сводки</dt>
-        <dd>Дневная сводка приходит сама. Недельный отчёт — когда захочешь взгляд подлиннее.</dd>
+        <dd>Дневная приходит сама. Недельную попроси, когда нужен взгляд пошире.</dd>
       </div>
       <div>
         <dt><svg class="ico" aria-hidden="true"><use href="#i-notion"></use></svg>Хранение</dt>
-        <dd>Записи, профиль и правила лежат в твоём Notion. Мы не храним ничего: ни копий заметок, ни аккаунтов, ни наших серверов с твоим дневником.</dd>
+        <dd>Записи, профиль и правила — в твоём Notion. Копий на стороне нет, и регистрироваться негде.</dd>
       </div>
     </dl>
   </section>
@@ -291,23 +291,23 @@
     <ul class="case-list">
       <li>
         <svg class="ico ico-lg" aria-hidden="true"><use href="#i-loop"></use></svg>
-        <h3>Выйти из своей же петли</h3>
-        <p>Проговори историю, которую себе рассказываешь. Он не покивает, а возразит — опираясь на прежние заметки.</p>
+        <h3>Выйти из зацикленности</h3>
+        <p>Проговори историю, которую себе повторяешь. Он не поддакивает, а спорит — и достаёт прежние заметки как аргумент.</p>
       </li>
       <li>
         <svg class="ico ico-lg" aria-hidden="true"><use href="#i-scale"></use></svg>
-        <h3>Продумать решение</h3>
-        <p>Проговори выбор до того, как сделал. Запись сохранит, что ты реально взвешивал, — потом сверишь рассуждение, а не только исход.</p>
+        <h3>Продумать решение вслух</h3>
+        <p>Проговори выбор до того, как сделал. Потом запись покажет, что ты взвешивал, а не только чем всё закончилось.</p>
       </li>
       <li>
         <svg class="ico ico-lg" aria-hidden="true"><use href="#i-spiral"></use></svg>
-        <h3>Слить ночную спираль</h3>
-        <p>На входе поток, на выходе чистая запись. Мысль перестаёт крутиться, когда она названа и подшита.</p>
+        <h3>Разгрузить голову в час ночи</h3>
+        <p>На входе поток, на выходе аккуратная запись. Мысль перестаёт крутиться, когда у неё есть название и своё место.</p>
       </li>
       <li>
         <svg class="ico ico-lg" aria-hidden="true"><use href="#i-calendar"></use></svg>
-        <h3>Разобрать неделю без домашки</h3>
-        <p>Никаких воскресных ритуалов. Сводка уже написана из того, что ты говорил всю неделю.</p>
+        <h3>Забрать неделю обратно</h3>
+        <p>Без воскресных ритуалов: сводка уже собрана из того, что ты наговорил за неделю.</p>
       </li>
     </ul>
   </section>
@@ -316,11 +316,11 @@
     <div class="slab-in">
       <h2 class="kicker">Команды</h2>
       <ul class="cmd-list">
-      <li><code>/weekly</code><span>Недельный отчёт, прямо сейчас</span></li>
-      <li><code>/stat</code><span>Сколько минут наговорил, по дням и месяцам</span></li>
-      <li><code>/memory</code><span>Пересобрать профиль по всем сохранённым заметкам</span></li>
-      <li><code>/rules</code><span>Показать, что он усвоил о том, как с тобой говорить</span></li>
-      <li><code>/help</code><span>Команды и кнопки превью</span></li>
+        <li><code>/weekly</code><span>Недельные хайлайты — прямо сейчас</span></li>
+        <li><code>/stat</code><span>Сколько минут наговорил: по дням и месяцам</span></li>
+        <li><code>/memory</code><span>Пересобрать профиль по всем заметкам</span></li>
+        <li><code>/rules</code><span>Показать правила, которые он у тебя перенял</span></li>
+        <li><code>/help</code><span>Команды и что делают кнопки</span></li>
       </ul>
     </div>
   </section>
@@ -331,37 +331,37 @@
     </div>
     <dl class="spec">
       <div>
-        <dt>Где хранится дневник?</dt>
-        <dd>В твоей базе Notion. На своей копии путь такой: Telegram, твоя машина, твой Notion, и больше нигде ничего не остаётся. Публичный демо-бот крутится на чужой машине и держит запись ровно столько, сколько нужно, чтобы записать строку в Notion.</dd>
+        <dt>Где лежит дневник?</dt>
+        <dd>В твоей базе Notion. На своей копии путь короткий: Telegram, твоя машина, твой Notion — по дороге ничего не оседает. Публичный бот общий: держит запись ровно до того момента, пока не создаст строку.</dd>
       </div>
       <div>
-        <dt>Нужно ли что-то печатать?</dt>
-        <dd>Нет. Отправь голосовое — расшифровка, заголовок, теги и дата появятся сами. Текстовые сообщения работают так же, если писать удобнее.</dd>
+        <dt>Обязательно печатать?</dt>
+        <dd>Нет. Отправляешь голосовое — расшифровка, заголовок, теги и дата приходят готовыми. Текстом тоже можно, если так привычнее.</dd>
       </div>
       <div>
         <dt>Сколько это стоит?</dt>
-        <dd>Код бесплатный и открытый. Платишь только за свой OpenAI и за машину, на которой запускаешь бота.</dd>
+        <dd>Код бесплатный и открытый. Платишь только за свой OpenAI и за машину, на которой всё крутится.</dd>
       </div>
       <div>
-        <dt>Можно изменить манеру общения?</dt>
-        <dd>Да, разговором. Скажи в чат «не морализируй» или «отвечай одной строкой» — он перепишет свои правила и сообщит, что изменил. Страница правил в Notion есть, если захочешь почитать.</dd>
+        <dt>Можно поменять манеру общения?</dt>
+        <dd>Да, достаточно сказать. «Отвечай одной строкой». «Без морали». Он сохранит это правилом и сообщит, что изменил.</dd>
       </div>
       <div>
-        <dt>Подходит ли к шаблону Notion Journal?</dt>
-        <dd>Да. Одна запись — одна строка с заголовком, текстом, тегами и датой, так что вьюхи и фильтры журнала продолжают работать.</dd>
+        <dt>Подойдёт к шаблону Notion Journal?</dt>
+        <dd>Да. Одна запись — одна строка: заголовок, текст, теги, дата. Твои вьюхи и фильтры продолжают работать.</dd>
       </div>
     </dl>
   </section>
 
   <section class="own">
-    <h2 class="section-title">Подними у себя</h2>
-    <p class="own-copy">Открытый код на Python. Твой токен Telegram, твой ключ OpenAI, твоя база Notion, на твоей машине. На своей копии заметки не попадают ни на чью чужую инфраструктуру. Клонируй, заполни <code>.env</code>, запусти процесс — вся установка.</p>
+    <h2 class="section-title">Подними свой</h2>
+    <p class="own-copy">Открытый код на Python. Твой токен Telegram, твой ключ OpenAI, твоя база Notion — всё на твоей машине, мимо нас. Клонируешь, заполняешь <code>.env</code>, запускаешь.</p>
     <p class="need-title">Что нужно до первой заметки</p>
     <ul class="need">
-      <li>Токен бота от @BotFather</li>
-      <li>Токен интеграции Notion и база, которой он выдан доступ</li>
+      <li>Токен бота у @BotFather</li>
+      <li>Токен интеграции Notion и база, к которой он подключён</li>
       <li>Ключ OpenAI</li>
-      <li>Python 3.11 на любой машине, которая всегда включена — минут десять</li>
+      <li>Python 3.11 и машина, которая не выключается — минут десять</li>
     </ul>
     <div class="cta-row">
       <a class="btn" href="https://t.me/pizdabol_ai_bot"><svg class="ico" aria-hidden="true"><use href="#i-telegram"></use></svg>Открыть в Telegram</a>
@@ -373,7 +373,7 @@
 
 <footer class="foot">
   <p class="wordmark">pizdabol<span class="dot">.</span></p>
-  <p>Дневник, который отвечает. Сделан для Notion Journal.</p>
+  <p>Дневник, который отвечает. Под шаблон Notion Journal.</p>
   <p><a href="https://github.com/ashugaev/telegram-voice-diary-bot"><svg class="ico" aria-hidden="true"><use href="#i-code"></use></svg>GitHub</a> · <a href="https://t.me/pizdabol_ai_bot"><svg class="ico" aria-hidden="true"><use href="#i-telegram"></use></svg>Telegram</a> · <a href="/" hreflang="en" lang="en">English</a></p>
 </footer>
 </body>

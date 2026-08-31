@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pizdabol — Telegram voice diary bot for Notion</title>
-<meta name="description" content="Send a voice note to Telegram: it transcribes, titles, tags and saves one row in your Notion journal, then answers like a coach who remembers every note. Open source, self-hosted, nothing stored on our side.">
+<title>Pizdabol — a Telegram diary you talk to, saved in Notion</title>
+<meta name="description" content="Send a voice note to Telegram and get a finished entry in your Notion journal: title, tags, date. The bot answers like it has read everything you have said, and keeps its own memory of you. Open source and self-hosted.">
 <link rel="canonical" href="https://pizdabol.app/">
 <link rel="alternate" hreflang="en" href="https://pizdabol.app/">
 <link rel="alternate" hreflang="ru" href="https://pizdabol.app/ru/">
@@ -18,17 +18,17 @@
 <meta property="og:site_name" content="Pizdabol">
 <meta property="og:locale" content="en_US">
 <meta property="og:url" content="https://pizdabol.app/">
-<meta property="og:title" content="Pizdabol — Telegram voice diary bot for Notion">
-<meta property="og:description" content="Voice notes in Telegram become titled, tagged rows in your own Notion journal — and the bot answers honestly.">
+<meta property="og:title" content="Pizdabol — a Telegram diary you talk to, saved in Notion">
+<meta property="og:description" content="Talk to Telegram, get a titled and tagged entry in your own Notion journal — and an honest answer back.">
 <meta property="og:image" content="https://pizdabol.app/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Pizdabol landing headline: say it out loud, it files the entry, then it argues with you">
+<meta property="og:image:alt" content="Pizdabol landing headline: a diary you can talk to, it learns you as it listens">
 <meta property="og:locale:alternate" content="ru_RU">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:image:alt" content="Pizdabol landing headline: say it out loud, it files the entry, then it argues with you">
-<meta name="twitter:title" content="Pizdabol — Telegram voice diary bot for Notion">
-<meta name="twitter:description" content="Voice notes in Telegram become titled, tagged rows in your own Notion journal — and the bot answers honestly.">
+<meta name="twitter:image:alt" content="Pizdabol landing headline: a diary you can talk to, it learns you as it listens">
+<meta name="twitter:title" content="Pizdabol — a Telegram diary you talk to, saved in Notion">
+<meta name="twitter:description" content="Talk to Telegram, get a titled and tagged entry in your own Notion journal — and an honest answer back.">
 <meta name="twitter:image" content="https://pizdabol.app/og.png">
 
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -45,7 +45,7 @@
   "applicationCategory": "LifestyleApplication",
   "operatingSystem": "Telegram",
   "url": "https://pizdabol.app/",
-  "description": "Telegram bot that turns voice notes into structured Notion diary entries and coaches you on what it reads.",
+  "description": "Telegram bot that turns voice notes into finished entries in your Notion journal and keeps its own memory of what you tell it.",
   "offers": {
     "@type": "Offer",
     "price": "0",
@@ -70,18 +70,18 @@
   "mainEntity": [
     {
       "@type": "Question",
-      "name": "Where is my diary stored?",
+      "name": "Where does my diary live?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "In your own Notion database. Running your own copy, the path is Telegram to your machine to your Notion, and nothing is kept anywhere else. The public demo bot runs on someone else's box and holds the entry only as long as it takes to write your Notion row."
+        "text": "In your own Notion database. With your own copy the path is Telegram, your machine, your Notion, and nothing is kept in between. The public bot is a shared demo: it holds the entry only long enough to write the row."
       }
     },
     {
       "@type": "Question",
-      "name": "Do I have to type anything?",
+      "name": "Do I have to type?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "No. Send a voice note and it is transcribed, titled, tagged, and dated for you. Typed messages work the same way if you would rather write."
+        "text": "No. Send a voice note and the transcript, title, tags and date come back done. Typing works the same way if you would rather write."
       }
     },
     {
@@ -89,7 +89,7 @@
       "name": "What does it cost?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "The code is free and open source. You pay only your own OpenAI usage and whatever the box you run it on costs."
+        "text": "The code is free and open source. You pay for your own OpenAI usage and for whatever machine you run it on."
       }
     },
     {
@@ -97,7 +97,7 @@
       "name": "Can I change how it talks to me?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Yes, by talking. Say “stop moralising” or “answer in one line” in the chat and it rewrites its own rules, then tells you what changed. The rules page in Notion is there if you ever want to read it."
+        "text": "Yes, by saying so. “Answer in one line.” “Drop the moralising.” It saves that as a rule and tells you what changed."
       }
     },
     {
@@ -105,7 +105,7 @@
       "name": "Does it fit the Notion Journal template?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Yes. One entry becomes one row with title, text, tags, and date, so the journal views and filters keep working."
+        "text": "Yes. One entry becomes one row with title, text, tags and date, so the views and filters you already have keep working."
       }
     }
   ]
@@ -149,13 +149,13 @@
   <section class="hero">
     <div class="hero-copy">
       <p class="eyebrow"><svg class="ico" aria-hidden="true"><use href="#i-mic"></use></svg> voice note <svg class="ico" aria-hidden="true"><use href="#i-notion"></use></svg> notion row <svg class="ico" aria-hidden="true"><use href="#i-flame"></use></svg> honest reply</p>
-      <h1>Say it out loud. It files the entry, then it <em>argues</em> with you.</h1>
-      <p class="lede">Pizdabol listens to your rambling voice notes, writes them into your Notion journal as clean, titled, tagged entries — and then says the thing your diary never says back.</p>
+      <h1>A diary you can talk to. It <em>learns</em> you as it listens.</h1>
+      <p class="lede">Send a voice note to Telegram and it comes back as a finished entry in your Notion journal — title, tags, date, all of it. Then the bot answers like someone who has read everything you have said so far.</p>
       <div class="cta-row">
         <a class="btn" href="https://t.me/pizdabol_ai_bot"><svg class="ico" aria-hidden="true"><use href="#i-telegram"></use></svg>Open in Telegram</a>
         <a class="btn btn-ghost" href="https://github.com/ashugaev/telegram-voice-diary-bot"><svg class="ico" aria-hidden="true"><use href="#i-code"></use></svg>Run your own copy</a>
       </div>
-      <p class="fineprint">Self-hosted: entries go from your box straight to your Notion, nothing of ours in between. The demo bot is a shared instance — try it, then run your own.</p>
+      <p class="fineprint">Your own copy sends notes straight from your machine to your Notion, nowhere else. The public bot is a shared demo — start there, move over when you like it.</p>
     </div>
 
     <div class="hero-thread" id="thread">
@@ -237,48 +237,48 @@
       <li>
         <span class="step-n">01</span>
         <h3><svg class="ico ico-step" aria-hidden="true"><use href="#i-mic"></use></svg>Say it</h3>
-        <p>Voice or text, any length, no format to follow. Midnight rambling is the intended input.</p>
+        <p>Voice or text, as long as you want. No structure to follow, no tags to pick, nothing to tidy up first.</p>
       </li>
       <li>
         <span class="step-n">02</span>
-        <h3><svg class="ico ico-step" aria-hidden="true"><use href="#i-notion"></use></svg>It files it</h3>
-        <p>Transcribed, titled, tagged, dated. One tap on Save and the entry is a row in your Notion journal.</p>
+        <h3><svg class="ico ico-step" aria-hidden="true"><use href="#i-notion"></use></svg>It gets filed</h3>
+        <p>Transcribed, given a title, tagged and dated. One tap and the entry is a row in your Notion journal.</p>
       </li>
       <li>
         <span class="step-n">03</span>
-        <h3><svg class="ico ico-step" aria-hidden="true"><use href="#i-flame"></use></svg>Talk back if you feel like it</h3>
-        <p>Tap Roast for an honest read, or just reply to the entry and keep going. Everything else it handles on its own.</p>
+        <h3><svg class="ico ico-step" aria-hidden="true"><use href="#i-flame"></use></svg>Keep talking, or don't</h3>
+        <p>Tap Roast for an honest read, or reply to the entry and the conversation carries on. Do neither and you still have the note.</p>
       </li>
     </ol>
   </section>
 
   <section class="learns">
-    <h2 class="section-title">It runs its own memory</h2>
-    <p class="lead-note">Nothing to maintain. It decides what is worth keeping about you, and you change it by talking.</p>
+    <h2 class="section-title">It keeps its own memory</h2>
+    <p class="lead-note">Nothing to maintain. It works out what is worth remembering about you, and you correct it by talking.</p>
     <dl class="spec">
       <div>
-        <dt><svg class="ico" aria-hidden="true"><use href="#i-profile"></use></svg>Learns by itself</dt>
-        <dd>It reads every note and keeps what matters about you. No forms, no tagging system, nothing for you to fill in.</dd>
+        <dt><svg class="ico" aria-hidden="true"><use href="#i-profile"></use></svg>Learns on its own</dt>
+        <dd>Every note sharpens the picture. No forms to fill in, no tags to invent, no prompt to write.</dd>
       </div>
       <div>
-        <dt><svg class="ico" aria-hidden="true"><use href="#i-mic"></use></svg>Changed by voice</dt>
-        <dd>Don't like what it remembered, or how it talks to you? Say it in the chat — "stop moralising", "forget that". It rewrites its own rules and tells you what changed.</dd>
+        <dt><svg class="ico" aria-hidden="true"><use href="#i-mic"></use></svg>Corrected by voice</dt>
+        <dd>"Stop moralising." "Forget that one." Say it in the chat and it rewrites its own rules, then tells you in a line what changed.</dd>
       </div>
       <div>
-        <dt><svg class="ico" aria-hidden="true"><use href="#i-rules"></use></svg>Nothing to curate</dt>
-        <dd>No memory files to groom, no prompt to write. The profile and the rules sit on their own Notion pages if you ever want to look.</dd>
+        <dt><svg class="ico" aria-hidden="true"><use href="#i-rules"></use></svg>Nothing to keep tidy</dt>
+        <dd>No memory files to groom. The profile and the rules sit on their own Notion pages if you ever feel like reading them.</dd>
       </div>
       <div>
         <dt><svg class="ico" aria-hidden="true"><use href="#i-flame"></use></svg>Roast</dt>
-        <dd>An honest read on the entry you just sent. Reply to it and the conversation keeps going — deeper, with the rest of your diary in the room.</dd>
+        <dd>An honest read on the entry you just sent. Reply and it goes deeper, with the rest of your diary already in the room.</dd>
       </div>
       <div>
         <dt><svg class="ico" aria-hidden="true"><use href="#i-calendar"></use></svg>Recaps</dt>
-        <dd>A daily summary lands on its own. Ask for the weekly report whenever you want the longer view.</dd>
+        <dd>The daily summary arrives on its own. Ask for the weekly one when you want the longer view.</dd>
       </div>
       <div>
         <dt><svg class="ico" aria-hidden="true"><use href="#i-notion"></use></svg>Storage</dt>
-        <dd>Entries, profile, and rules all live in your Notion. We keep nothing: no copies of your notes, no accounts, no servers of ours holding your diary.</dd>
+        <dd>Entries, profile and rules all sit in your Notion. Nothing is copied anywhere else, and there is no account to make.</dd>
       </div>
     </dl>
   </section>
@@ -291,22 +291,22 @@
     <ul class="case-list">
       <li>
         <svg class="ico ico-lg" aria-hidden="true"><use href="#i-loop"></use></svg>
-        <h3>Break the loop you are stuck in</h3>
-        <p>Say the story you keep telling yourself out loud. It pushes back instead of nodding along, with your earlier notes as context.</p>
+        <h3>Break a loop you are stuck in</h3>
+        <p>Say the story you keep telling yourself. It argues instead of agreeing, and it has your earlier notes to argue with.</p>
       </li>
       <li>
         <svg class="ico ico-lg" aria-hidden="true"><use href="#i-scale"></use></svg>
-        <h3>Think a decision through</h3>
-        <p>Talk the call out before you make it. The entry keeps what you actually weighed, so the next you can check the reasoning instead of the outcome.</p>
+        <h3>Think a decision out loud</h3>
+        <p>Talk the choice through before you make it. Later the entry shows what you actually weighed, not just how it turned out.</p>
       </li>
       <li>
         <svg class="ico ico-lg" aria-hidden="true"><use href="#i-spiral"></use></svg>
-        <h3>Dump the 1 a.m. spiral</h3>
-        <p>Rant in, clean entry out. The thought stops circling once it is written down, titled, and filed somewhere you can find it.</p>
+        <h3>Empty a 1 a.m. head</h3>
+        <p>Rant in, clean entry out. The thought stops circling once it has a title and somewhere to sit.</p>
       </li>
       <li>
         <svg class="ico ico-lg" aria-hidden="true"><use href="#i-calendar"></use></svg>
-        <h3>Review a week without homework</h3>
+        <h3>Get the week back, for free</h3>
         <p>No Sunday ritual to keep up. The recap is already written from what you said during the week.</p>
       </li>
     </ul>
@@ -316,11 +316,11 @@
     <div class="slab-in">
       <h2 class="kicker">Commands</h2>
       <ul class="cmd-list">
-      <li><code>/weekly</code><span>Weekly highlight report, now</span></li>
-      <li><code>/stat</code><span>Minutes you've talked, by day and month</span></li>
-      <li><code>/memory</code><span>Rebuild the profile from every saved note</span></li>
-      <li><code>/rules</code><span>Show what it learned about how to talk to you</span></li>
-      <li><code>/help</code><span>Commands and preview buttons</span></li>
+        <li><code>/weekly</code><span>Weekly highlights, right now</span></li>
+        <li><code>/stat</code><span>How many minutes you have talked, by day and month</span></li>
+        <li><code>/memory</code><span>Rebuild the profile from every saved note</span></li>
+        <li><code>/rules</code><span>See the rules it picked up from you</span></li>
+        <li><code>/help</code><span>Commands, and what the buttons do</span></li>
       </ul>
     </div>
   </section>
@@ -331,37 +331,37 @@
     </div>
     <dl class="spec">
       <div>
-        <dt>Where is my diary stored?</dt>
-        <dd>In your own Notion database. Running your own copy, the path is Telegram to your machine to your Notion, and nothing is kept anywhere else. The public demo bot runs on someone else's box and holds the entry only as long as it takes to write your Notion row.</dd>
+        <dt>Where does my diary live?</dt>
+        <dd>In your own Notion database. With your own copy the path is Telegram, your machine, your Notion, and nothing is kept in between. The public bot is a shared demo: it holds the entry only long enough to write the row.</dd>
       </div>
       <div>
-        <dt>Do I have to type anything?</dt>
-        <dd>No. Send a voice note and it is transcribed, titled, tagged, and dated for you. Typed messages work the same way if you would rather write.</dd>
+        <dt>Do I have to type?</dt>
+        <dd>No. Send a voice note and the transcript, title, tags and date come back done. Typing works the same way if you would rather write.</dd>
       </div>
       <div>
         <dt>What does it cost?</dt>
-        <dd>The code is free and open source. You pay only your own OpenAI usage and whatever the box you run it on costs.</dd>
+        <dd>The code is free and open source. You pay for your own OpenAI usage and for whatever machine you run it on.</dd>
       </div>
       <div>
         <dt>Can I change how it talks to me?</dt>
-        <dd>Yes, by talking. Say “stop moralising” or “answer in one line” in the chat and it rewrites its own rules, then tells you what changed. The rules page in Notion is there if you ever want to read it.</dd>
+        <dd>Yes, by saying so. “Answer in one line.” “Drop the moralising.” It saves that as a rule and tells you what changed.</dd>
       </div>
       <div>
         <dt>Does it fit the Notion Journal template?</dt>
-        <dd>Yes. One entry becomes one row with title, text, tags, and date, so the journal views and filters keep working.</dd>
+        <dd>Yes. One entry becomes one row with title, text, tags and date, so the views and filters you already have keep working.</dd>
       </div>
     </dl>
   </section>
 
   <section class="own">
-    <h2 class="section-title">Run it yourself</h2>
-    <p class="own-copy">Open source Python. Your Telegram token, your OpenAI key, your Notion database, on a box you control. Run your own copy and your notes never touch anyone else's infrastructure. Clone it, fill in <code>.env</code>, start the process — that's the whole install.</p>
-    <p class="need-title">What you need before the first note</p>
+    <h2 class="section-title">Run your own</h2>
+    <p class="own-copy">Open source Python. Your Telegram token, your OpenAI key, your Notion database, on a machine you control — nothing routes through us. Clone it, fill in <code>.env</code>, start it.</p>
+    <p class="need-title">What you need for the first note</p>
     <ul class="need">
-      <li>Telegram bot token from @BotFather</li>
-      <li>Notion integration token and a database shared with it</li>
-      <li>OpenAI API key</li>
-      <li>Python 3.11 on any always-on box — about ten minutes</li>
+      <li>A bot token from @BotFather</li>
+      <li>A Notion integration token, and a database shared with it</li>
+      <li>An OpenAI key</li>
+      <li>Python 3.11 on a machine that stays on — about ten minutes</li>
     </ul>
     <div class="cta-row">
       <a class="btn" href="https://t.me/pizdabol_ai_bot"><svg class="ico" aria-hidden="true"><use href="#i-telegram"></use></svg>Open in Telegram</a>
@@ -373,7 +373,7 @@
 
 <footer class="foot">
   <p class="wordmark">pizdabol<span class="dot">.</span></p>
-  <p>A diary that talks back. Built for the Notion Journal.</p>
+  <p>A diary that answers back. Built for the Notion Journal.</p>
   <p><a href="https://github.com/ashugaev/telegram-voice-diary-bot"><svg class="ico" aria-hidden="true"><use href="#i-code"></use></svg>GitHub</a> · <a href="https://t.me/pizdabol_ai_bot"><svg class="ico" aria-hidden="true"><use href="#i-telegram"></use></svg>Telegram</a> · <a href="/ru/" hreflang="ru" lang="ru">Русский</a></p>
 </footer>
 </body>
