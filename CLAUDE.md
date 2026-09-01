@@ -52,7 +52,7 @@ Capabilities loaded by description match. Source: [.claude/skills/](.claude/skil
 - Feature parity: any user-visible feature change updates, in the same PR, `README.md` + `docs/`, the bot `/help` text and command list in `bot.py`, and both landing pages (`landing/index.html`, `landing/ru/index.html`). Missing surface = unfinished change.
 - Landing stays sexy: distinctive, minimal, deliberate. No templated hero, no stock card grid, no generic AI-default look. Static HTML + CSS only — no client-side rendering, no framework, no build step — and SEO surface intact: semantic markup, meta, OG, JSON-LD, canonical, hreflang, sitemap.
 - Landing is bilingual: EN at `landing/`, RU at `landing/ru/`. Copy changes land in both, with matching hreflang. This is the only place non-English user-facing text is allowed.
-- Preserve diary behavior unless the task says otherwise: original transcription/text is previewed by default; Format changes only draft text; Save writes one Notion row.
+- Preserve diary behavior unless the task says otherwise: formatted text is previewed by default with an Original toggle; formatting changes only draft text; Save writes one Notion row.
 - For Notion schema changes, update constants in `services/notion.py`, schema tests, duplicate tests when relevant, and README database docs.
 - For OpenAI formatting changes, keep JSON-only responses, Russian diary prompt behavior, long-transcription metadata-only path, and fallback tests.
 - For state changes, use temp paths in tests; never read or mutate `.data/message_state.json` during tests.
