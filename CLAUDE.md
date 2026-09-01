@@ -40,6 +40,7 @@ Capabilities loaded by description match. Source: [.claude/skills/](.claude/skil
 ## Always-on rules
 
 - Caveman style, always, everywhere: prompts, docs, skills, comments, commit messages, PR bodies, replies. Minimal text, maximum meaning density. Short declaratives, no filler, no hedging, no preambles, no restating context, no politeness padding. Cut every word that carries no information. Meaning beats prose — if it reads shorter and says the same, ship the shorter one.
+- Reply in the user's language.
 - English-only repo: author all code, comments, identifiers, user-facing strings, docs, tests, commit messages, PR titles/bodies, and git interactions in English. Make AI response language a runtime setting (e.g. `ROAST_LANGUAGE`) instead of hardcoding a non-English prompt.
 - Prefer the repo's current Python style: small functions, explicit constants, `unittest`, async tests via `unittest.IsolatedAsyncioTestCase`.
 - Run `make test` before sign-off for code changes. For narrow edits, run the targeted `python -m unittest ...` first, then `make test`.
