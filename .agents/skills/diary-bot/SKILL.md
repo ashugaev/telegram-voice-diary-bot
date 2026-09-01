@@ -24,6 +24,7 @@ Use this as project memory for implementation and validation.
 | Memory sync with Notion pages next to the database | `services/notion_memory.py`, `tests/test_notion_memory.py` |
 | Local message and draft state | `services/state_store.py`, `tests/test_state_store.py` |
 | Dev, test, deploy commands | `Makefile`, `README.md`, `.github/workflows/ci.yml` |
+| Landing site, EN and RU | `landing/index.html`, `landing/ru/index.html`, `landing/styles.css`, `landing/sitemap.xml` |
 
 ## Behavior invariants
 
@@ -65,4 +66,6 @@ make test
 - Telegram flow changed: update `bot.py` tests for callbacks, preview text, prompt state, and cancel/save retry behavior.
 - OpenAI prompt/model changed: update OpenAI service tests and fallback behavior.
 - State shape changed: keep backward load defaults or explicit migration; test old/minimal state.
+- User-visible feature changed: update `README.md` + `docs/`, `COMMANDS` and `WELCOME_TEXT` in `bot.py` (drive `/help` and the Telegram menu), and both landing pages.
+- Landing changed: keep it static HTML + CSS, no JS; mirror EN and RU copy; keep meta, OG, JSON-LD, hreflang, and `sitemap.xml` correct; preview via the `landing` sidecar.
 - Deployment changed: route through `operator`; validate without touching production unless requested.

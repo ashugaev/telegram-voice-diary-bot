@@ -11,6 +11,16 @@ projects:
         command: 'bash -c "ssh root@146.190.110.77 systemctl stop noter 2>/dev/null || true; exec bash scripts/bot-watch.sh"'
         autoStart: false
         idleTtlMinutes: 999999
+      landing:
+        command: 'python3 -m http.server "${LANDING_PORT:-3080}" --bind 127.0.0.1 --directory landing'
+        autoStart: false
+        idleTtlMinutes: 999999
+        ports:
+          landing:
+            env: LANDING_PORT
+            start: 3080
+            end: 3089
+            url: "https://{port}.local.intelas.tech"
     sources:
       gh:
         type: github

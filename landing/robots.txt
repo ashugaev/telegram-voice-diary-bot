@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://pizdabol.app/sitemap.xml
