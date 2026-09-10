@@ -29,7 +29,7 @@ Create concrete implementation plan grounded in current diary-bot code.
 
 ### Scope
 - Modules: <paths>
-- External boundaries: Telegram | OpenAI | Notion | filesystem | VPS | none
+- External boundaries: Telegram | OpenAI | Notion | filesystem | systemd | none
 - Production impact: yes | no
 
 ### Affected files

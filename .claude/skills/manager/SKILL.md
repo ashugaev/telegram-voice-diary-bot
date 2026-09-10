@@ -22,7 +22,7 @@ Coordinate workflow. Delegate work to agents and skills; aggregate results. Use 
 | Non-trivial implementation | `architect` |
 | Any code change | `diary-bot` skill -> `architect` -> `developer` -> `code-simplifier` -> `reviewer` -> `tester` |
 | Touches `bot.py`, `services/*.py`, `config.py`, `.env.example`, tests, README user flow, Makefile, CI | `diary-bot` skill |
-| Touches Makefile, deployment docs, VPS/systemd, env, scheduling, state path, or production runtime | `operator` before `tester` |
+| Touches Makefile, deployment docs, systemd, env, scheduling, state path, or production runtime | `operator` before `tester` |
 | Touches `.codex/config.toml`, `.codex/hooks.json`, or `.codex/hooks/` | `operator` before `tester` |
 | Touches `SKILL.md`, agent definitions, `AGENTS.md`, `CLAUDE.md`, or `.codex` prompts | `skill-writer` before `reviewer` |
 | Docs-only with no behavior change | `skill-writer` when agent docs, otherwise `self-verify` |

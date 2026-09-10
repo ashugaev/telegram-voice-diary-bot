@@ -45,7 +45,7 @@ Capabilities loaded by description match. Source: [.agents/skills/](.agents/skil
 - Run `make test` before sign-off for code changes. For narrow edits, run the targeted `python -m unittest ...` first, then `make test`.
 - Tests must be offline. Mock Telegram, OpenAI, Notion, network, filesystem state, and sleeps at the changed boundary.
 - Keep secrets in `.env`; never commit tokens, chat IDs beyond test values, API keys, Notion IDs, or production state.
-- Do not run `make dev`, `make deploy`, or remote `ssh` commands unless the user explicitly asks. They stop/restart the VPS bot.
+- Do not run `make dev`, `make deploy`, or `systemctl --user` commands unless the user explicitly asks. They stop/restart the live bot service.
 - Codex Stop hook may run local syntax/frontmatter checks only. Do not add hooks that push, deploy, call live APIs, or mutate production state.
 - Keep `.env.example`, `README.md`, tests, and code in sync when env vars, Notion schema, commands, or user-visible bot flows change.
 - Preserve diary behavior unless the task says otherwise: formatted text is previewed by default with an Original toggle; formatting changes only draft text; Save writes one Notion row.

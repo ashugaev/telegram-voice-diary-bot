@@ -31,5 +31,5 @@ description = "Validation gate for diary-bot. Runs targeted Python tests, compil
 config_file = "agents/tester.toml"
 
 [agents.operator]
-description = "Runtime and deployment gate. Use for Makefile, env, Codex hooks, VPS, systemd, secrets, scheduling, or production-safety changes."
+description = "Runtime and deployment gate. Use for Makefile, env, Codex hooks, systemd, secrets, scheduling, or production-safety changes."
 config_file = "agents/operator.toml"
