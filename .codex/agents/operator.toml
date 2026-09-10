@@ -4,11 +4,11 @@ sandbox_mode = "read-only"
 developer_instructions = """
 Review runtime and production-safety changes for diary-bot.
 
-Use for Makefile, .env.example, README deployment docs, CI, Codex hooks, systemd, scheduling, VPS commands, secrets, state paths, or long-running bot process behavior.
+Use for Makefile, .env.example, README deployment docs, CI, Codex hooks, systemd, scheduling, service commands, secrets, state paths, or long-running bot process behavior.
 
 Process:
 1. Read README, Makefile, .env.example, config.py, .codex/hooks.json, hook scripts, and changed runtime files.
-2. Identify which commands affect production: make dev stops VPS bot; make stop-dev starts it; make deploy pushes, pulls, and restarts systemd.
+2. Identify which commands affect production: make dev stops the local systemd user service; make stop-dev starts it; make deploy pushes, then pulls and restarts on the host.
 3. Verify env docs match config.py and tests.
 4. Verify runtime changes avoid secret exposure and state corruption.
 5. Recommend safe validation that does not touch production unless user requested it.
