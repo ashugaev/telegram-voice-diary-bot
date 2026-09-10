@@ -1,19 +1,22 @@
-HOST=root@146.190.110.77
-APP_DIR=/opt/noter
+APP_DIR=/home/alek/projects/diary-bot
 PYTHON ?= .venv/bin/python
+SERVICE=diary-bot.service
 
-.PHONY: deploy dev stop-dev test
+.PHONY: deploy dev stop-dev logs test
 
 deploy:
 	git push
-	ssh $(HOST) "cd $(APP_DIR) && git pull && systemctl restart noter && systemctl status noter --no-pager"
+	$(APP_DIR)/scripts/bot-update.sh
 
 dev:
-	ssh $(HOST) "systemctl stop noter"
-	.venv/bin/python bot.py
+	systemctl --user stop $(SERVICE)
+	$(PYTHON) bot.py
 
 stop-dev:
-	ssh $(HOST) "systemctl start noter"
+	systemctl --user start $(SERVICE)
+
+logs:
+	journalctl --user -u $(SERVICE) -f
 
 test:
 	$(PYTHON) -m py_compile bot.py config.py services/*.py tests/*.py

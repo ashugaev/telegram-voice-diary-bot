@@ -1,0 +1,19 @@
+[Unit]
+Description=Pizdabol diary bot (Telegram -> Notion)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/alek/projects/diary-bot
+Environment=PYTHONUNBUFFERED=1
+Environment=BOT_STATE_PATH=/home/alek/projects/diary-bot/.data/message_state.json
+ExecStart=/home/alek/projects/diary-bot/.venv/bin/python bot.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=diary-bot
+
+[Install]
+WantedBy=default.target

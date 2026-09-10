@@ -8,7 +8,7 @@ projects:
       - .env
     sidecars:
       dev:
-        command: 'bash -c "ssh root@146.190.110.77 systemctl stop noter 2>/dev/null || true; exec bash scripts/bot-watch.sh"'
+        command: 'bash -c "systemctl --user stop diary-bot.service 2>/dev/null || true; exec bash scripts/bot-watch.sh"'
         autoStart: false
         idleTtlMinutes: 999999
     sources:

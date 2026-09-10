@@ -3,60 +3,63 @@
 ## Local development
 
 ```bash
-make dev        # stop the VPS bot and run locally
-make stop-dev   # restore the VPS bot when done
+make dev        # stop the running service and run the bot in the foreground
+make stop-dev   # hand the bot back to the service
+make logs       # follow service logs
 make test       # offline validation — no Telegram/OpenAI/Notion calls
 ```
 
-## Deploy to VPS
+## Deploy
 
 ```bash
-make deploy
+make deploy     # push to main, then pull + restart on the host
 ```
 
-Pushes to GitHub, pulls on the VPS, and restarts the bot.
+The host also pulls `origin/main` on its own every 10 minutes, so a merged PR ships without `make deploy`.
 
-## First-time VPS setup
+## Host setup
+
+The bot runs on `openclaw-dev` as a **systemd user service**, not on a VPS. One instance only — Telegram allows a single poller per token.
+
+```
+/home/alek/projects/diary-bot          checkout the service runs from, tracks main
+/home/alek/projects/diary-bot/.env     secrets, never committed
+/home/alek/projects/diary-bot/.data    local state (messages, drafts, profile, rules)
+```
+
+First-time setup:
 
 ```bash
-git clone https://github.com/ashugaev/pizdabol-ai.git /opt/noter
-cd /opt/noter
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env && nano .env   # fill in all values
+git clone git@github.com:ashugaev/pizdabol-ai.git /home/alek/projects/diary-bot
+cd /home/alek/projects/diary-bot
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+cp .env.example .env && nano .env
+
+cp deploy/diary-bot.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now diary-bot.service
+sudo loginctl enable-linger "$USER"   # survive reboot without a login session
 ```
 
-Create `/etc/systemd/system/noter.service`:
+Auto-update, in the user crontab:
 
-```ini
-[Unit]
-Description=Pizdabol Telegram Bot
-After=network.target
-
-[Service]
-User=root
-WorkingDirectory=/opt/noter
-ExecStart=/opt/noter/.venv/bin/python bot.py
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
+```
+*/10 * * * * /home/alek/projects/diary-bot/scripts/bot-update.sh >> /tmp/diary-bot-update.log 2>&1
 ```
 
-```bash
-systemctl daemon-reload
-systemctl enable noter
-systemctl start noter
-```
+`scripts/bot-update.sh` fast-forwards `main`, reinstalls deps only when `requirements.txt` changed, and restarts the service. It skips when the checkout is dirty or on another branch.
 
 Useful commands:
 
 ```bash
-systemctl status noter     # status
-journalctl -u noter -f     # live logs
-systemctl restart noter    # restart
+systemctl --user status diary-bot        # status
+journalctl --user -u diary-bot -f        # live logs
+systemctl --user restart diary-bot       # restart
 ```
+
+## State
+
+State lives in `.data/message_state.json`. The author profile and behavior rules are mirrored to Notion and re-adopted from those pages on startup, so Notion is the durable copy of memory; the local file additionally holds message mapping and unsaved drafts.
 
 ## Project structure
 
@@ -76,6 +79,9 @@ services/
 ├── stats.py            # Audio-minute stats
 ├── state_store.py      # Local JSON state (messages, drafts, profile, rules)
 └── diary_dates.py      # Diary-day date logic
+deploy/diary-bot.service  # systemd user unit
+scripts/bot-update.sh     # cron auto-update
+scripts/bot-watch.sh      # dev sidecar: restart on file change
 Makefile                # Dev & deploy commands
 requirements.txt
 .env.example
