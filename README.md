@@ -41,4 +41,4 @@ The bot publishes this list to Telegram on startup, so typing `/` in the chat sh
 
 - **[Usage](docs/usage.md)** — preview & editing, highlights, roast mode, behavior rules, author profile, tags, summaries.
 - **[Configuration](docs/configuration.md)** — environment variables, AI provider, Notion setup.
-- **[Development & deployment](docs/deployment.md)** — local dev, tests, VPS + systemd, project structure, costs.
+- **[Development & deployment](docs/deployment.md)** — local dev, tests, systemd service, auto-update, project structure, costs.
