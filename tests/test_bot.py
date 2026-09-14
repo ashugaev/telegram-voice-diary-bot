@@ -690,6 +690,45 @@ class FormatDraftFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("format:entry-1", callback_data)
         self.assertNotIn("unformat:entry-1", callback_data)
 
+    async def test_text_edit_preserves_original_recognized_text(self):
+        draft = {
+            "id": "entry-1",
+            "title": "Title",
+            "text": "Formatted text",
+            "raw_text": "Raw model text",
+            "tags": ["work"],
+            "chat_id": 123,
+            "preview_msg_id": 20,
+            "entry_date": bot._default_entry_date(),
+        }
+        user_msg = SimpleNamespace(
+            text="Manually edited text",
+            reply_to_message=SimpleNamespace(message_id=51),
+            message_id=60,
+        )
+        update = SimpleNamespace(
+            effective_message=user_msg,
+            effective_chat=SimpleNamespace(id=123),
+        )
+        context = SimpleNamespace(
+            bot=SimpleNamespace(
+                edit_message_text=AsyncMock(),
+                delete_message=AsyncMock(),
+            ),
+            user_data={
+                bot.DRAFTS_KEY: {"entry-1": draft},
+                bot.EDIT_PROMPTS_KEY: {"123:51": {"entry_id": "entry-1", "field": "text"}},
+            },
+        )
+        fake_state_store = FakeStateStore()
+
+        with patch.object(bot, "state_store", fake_state_store):
+            await bot.receive_edit_reply(update, context)
+
+        self.assertEqual(draft["text"], "Manually edited text")
+        self.assertEqual(draft["raw_text"], "Raw model text")
+        self.assertEqual(fake_state_store.saved_drafts[-1]["raw_text"], "Raw model text")
+
 
 
 class DatePickerFlowTests(unittest.IsolatedAsyncioTestCase):
