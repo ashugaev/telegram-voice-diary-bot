@@ -1552,7 +1552,6 @@ async def receive_edit_reply(update: Update, context: ContextTypes.DEFAULT_TYPE)
         draft["title"] = user_msg.text.strip()
     elif field == "text":
         draft["text"] = user_msg.text.strip()
-        draft["raw_text"] = draft["text"]
     elif field == "tags":
         draft["tags"] = [t.strip() for t in user_msg.text.split(",") if t.strip()]
     draft["preview_page"] = 0
