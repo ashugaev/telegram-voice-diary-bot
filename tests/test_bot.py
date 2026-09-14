@@ -730,7 +730,6 @@ class FormatDraftFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(fake_state_store.saved_drafts[-1]["raw_text"], "Raw model text")
 
 
-
 class DatePickerFlowTests(unittest.IsolatedAsyncioTestCase):
     async def test_set_entry_date_persists_and_returns_to_preview(self):
         fake_state_store = FakeStateStore()
