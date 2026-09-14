@@ -73,6 +73,7 @@ class NotionSchemaTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.day, "Day")
         self.assertEqual(result.source, "Source")
         self.assertEqual(result.source_message_url, "Source Message URL")
+        self.assertEqual(result.original_text, "Original Text")
         self.assertEqual(len(http.patch_calls), 1)
         self.assertEqual(
             http.patch_calls[0]["json"],
@@ -85,6 +86,7 @@ class NotionSchemaTests(unittest.IsolatedAsyncioTestCase):
                     "Telegram Chat ID": {"number": {}},
                     "Telegram Message ID": {"number": {}},
                     "Source Message URL": {"url": {}},
+                    "Original Text": {"rich_text": {}},
                     "Voice File Unique ID": {"rich_text": {}},
                     "Audio Duration": {"number": {}},
                     "Audio File Size": {"number": {}},
@@ -103,6 +105,7 @@ class NotionSchemaTests(unittest.IsolatedAsyncioTestCase):
             "Telegram Chat ID": {"type": "number"},
             "Telegram Message ID": {"type": "number"},
             "Source Message URL": {"type": "url"},
+            "Original Text": {"type": "rich_text"},
             "Voice File Unique ID": {"type": "rich_text"},
             "Audio Duration": {"type": "number"},
             "Audio File Size": {"type": "number"},
@@ -129,6 +132,7 @@ class NotionSchemaTests(unittest.IsolatedAsyncioTestCase):
             "Telegram Chat ID": {"type": "number"},
             "Telegram Message ID": {"type": "number"},
             "Source Message URL": {"type": "url"},
+            "Original Text": {"type": "rich_text"},
             "Voice File Unique ID": {"type": "rich_text"},
             "Audio Duration": {"type": "number"},
             "Audio File Size": {"type": "number"},
@@ -171,8 +175,9 @@ class NotionSchemaTests(unittest.IsolatedAsyncioTestCase):
             metadata=None,
             entry_date=None,
             allow_duplicate=False,
+            original_text=None,
         ):
-            calls.append((entry_title, entry_text, entry_tags, metadata, entry_date, allow_duplicate))
+            calls.append((entry_title, entry_text, entry_tags, metadata, entry_date, allow_duplicate, original_text))
             return notion.SaveResult(page_id="page-1", created=True)
 
         original_create_page = notion.create_page
@@ -184,12 +189,13 @@ class NotionSchemaTests(unittest.IsolatedAsyncioTestCase):
                 ["work"],
                 entry_date="2026-06-08",
                 allow_duplicate=True,
+                original_text="Raw text",
             )
         finally:
             notion.create_page = original_create_page
 
         self.assertEqual(result, notion.SaveResult(page_id="page-1", created=True))
-        self.assertEqual(calls, [("Title", "Text", ["work"], None, "2026-06-08", True)])
+        self.assertEqual(calls, [("Title", "Text", ["work"], None, "2026-06-08", True, "Raw text")])
 
     async def test_request_with_retry_retries_transient_notion_errors(self):
         http = FakeRetryHttp([
@@ -231,6 +237,7 @@ class NotionSchemaTests(unittest.IsolatedAsyncioTestCase):
                     "audio_file_size": 1000,
                 },
                 entry_date="2026-06-08",
+                original_text="Raw model text",
             )
         finally:
             notion.httpx.AsyncClient = original_client
@@ -248,6 +255,10 @@ class NotionSchemaTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             create_payload["properties"]["Voice File Unique ID"],
             {"rich_text": [{"text": {"content": "voice-unique"}}]},
+        )
+        self.assertEqual(
+            create_payload["properties"]["Original Text"],
+            {"rich_text": [{"text": {"content": "Raw model text"}}]},
         )
         self.assertEqual(create_payload["properties"]["Audio Duration"], {"number": 42})
         self.assertEqual(create_payload["properties"]["Audio File Size"], {"number": 1000})
@@ -495,6 +506,7 @@ class FakeCreatePageHttp:
                     "Telegram Chat ID": {"type": "number"},
                     "Telegram Message ID": {"type": "number"},
                     "Source Message URL": {"type": "url"},
+                    "Original Text": {"type": "rich_text"},
                     "Voice File Unique ID": {"type": "rich_text"},
                     "Audio Duration": {"type": "number"},
                     "Audio File Size": {"type": "number"},
@@ -538,6 +550,7 @@ class FakeQueryPagesHttp:
                 "Telegram Chat ID": {"type": "number"},
                 "Telegram Message ID": {"type": "number"},
                 "Source Message URL": {"type": "url"},
+                "Original Text": {"type": "rich_text"},
                 "Voice File Unique ID": {"type": "rich_text"},
                 "Audio Duration": {"type": "number"},
                 "Audio File Size": {"type": "number"},

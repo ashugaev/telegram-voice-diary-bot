@@ -50,7 +50,7 @@ No code changes needed — restart the bot. Transcription always uses OpenAI Whi
 
 ## Notion setup
 
-The bot works with the [Notion Journal](https://www.notion.com/help/guides/journal) database. It auto-creates any missing `Created`, `Tags`, `Day`, and metadata properties, so you mostly just need to connect the integration:
+The bot works with the [Notion Journal](https://www.notion.com/help/guides/journal) database. It auto-creates any missing `Created`, `Tags`, `Day`, `Original Text`, and metadata properties, so you mostly just need to connect the integration:
 
 1. Open your database in Notion.
 2. Click `...` → `Connections` → select your integration.
@@ -67,6 +67,7 @@ The bot works with the [Notion Journal](https://www.notion.com/help/guides/journ
 | `Telegram Chat ID` | Number | Source chat, for tracing and duplicate checks |
 | `Telegram Message ID` | Number | Source message, for tracing and duplicate checks |
 | `Source Message URL` | URL | Telegram link to the original message |
+| `Original Text` | Text | Raw recognized text before formatter cleanup |
 | `Voice File Unique ID` | Text | Stable Telegram voice file identifier |
 | `Audio Duration` | Number | Voice duration in seconds |
 | `Audio File Size` | Number | Voice file size in bytes |

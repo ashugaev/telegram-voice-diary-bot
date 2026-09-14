@@ -94,7 +94,7 @@ class PreviewRender:
 COMMANDS: tuple[tuple[str, str], ...] = (
     ("start", "What I do"),
     ("help", "Commands and buttons"),
-    ("weekly", "Weekly highlights now"),
+    ("weekly", "Weekly report now"),
     ("stat", "Saved audio minutes"),
     ("memory", "Rebuild author profile from all notes"),
     ("rules", "Behavior rules you taught me"),
@@ -113,9 +113,7 @@ Voice or text. I transcribe, title, tag, show preview.
 
 *Preview buttons*
 `✎ Title` `✎ Text` `✎ Tags` — reply with new value
-`✦ Format` — clean up text, `↺ Original` reverts
 `Date` — today or last 6 days
-`Highlight ⭐` — mark as week highlight
 `🔥 Roast` — honest take, reply to keep talking
 `✓ Save` — write to Notion, nothing saved before this
 `Cancel` — drop draft
@@ -483,19 +481,11 @@ def _get_draft(context: ContextTypes.DEFAULT_TYPE, entry_id: str) -> dict[str, A
 
 def _preview_keyboard(
     entry_id: str,
-    highlighted: bool = False,
     entry_date: str | None = None,
-    show_format: bool = False,
-    show_original: bool = False,
     show_pagination: bool = False,
     preview_page: int = 0,
     page_count: int = 1,
 ) -> InlineKeyboardMarkup:
-    highlight_btn = (
-        InlineKeyboardButton("⭐ Highlighted", callback_data=f"toggle_highlight:{entry_id}")
-        if highlighted else
-        InlineKeyboardButton("Mark as Highlight ⭐", callback_data=f"toggle_highlight:{entry_id}")
-    )
     rows = []
     if show_pagination and page_count > 1:
         previous_page = max(preview_page - 1, 0)
@@ -511,12 +501,7 @@ def _preview_keyboard(
             InlineKeyboardButton("✎ Tags", callback_data=f"edit_tags:{entry_id}"),
         ],
     )
-    if show_format:
-        rows.append([InlineKeyboardButton("✦ Format", callback_data=f"format:{entry_id}")])
-    elif show_original:
-        rows.append([InlineKeyboardButton("↺ Original", callback_data=f"unformat:{entry_id}")])
     rows.append([InlineKeyboardButton(f"Date: {_entry_date_label(entry_date)}", callback_data=f"pick_date:{entry_id}")])
-    rows.append([highlight_btn])
     if roast.is_configured():
         rows.append([InlineKeyboardButton("🔥 Roast", callback_data=f"roast:{entry_id}")])
     rows.append([InlineKeyboardButton("✓ Save", callback_data=f"save:{entry_id}")])
@@ -566,10 +551,6 @@ def _duplicate_warning_text(metadata: dict | None) -> str:
     return "This entry has already been added.\n\nAdd it again anyway?"
 
 
-def _draft_highlighted(draft: dict) -> bool:
-    return draft["title"].startswith("⭐ ")
-
-
 def _draft_preview_page(draft: dict) -> int:
     try:
         return max(0, int(draft.get("preview_page", 0)))
@@ -587,18 +568,11 @@ def _render_preview_for_draft(draft: dict) -> PreviewRender:
     )
 
 
-def _can_show_format(formatted_text: str | None, formatted: bool = False) -> bool:
-    return bool(formatted_text) and not formatted
-
-
 def _preview_keyboard_for_draft(draft: dict, preview: PreviewRender | None = None) -> InlineKeyboardMarkup:
     preview = preview or _render_preview_for_draft(draft)
     return _preview_keyboard(
         draft["id"],
-        highlighted=_draft_highlighted(draft),
         entry_date=draft.get("entry_date"),
-        show_format=_can_show_format(draft.get("formatted_text"), bool(draft.get("formatted"))),
-        show_original=bool(draft.get("formatted")),
         show_pagination=preview.truncated,
         preview_page=preview.page,
         page_count=preview.page_count,
@@ -1235,16 +1209,12 @@ async def _create_preview(
     entry_date = _default_entry_date()
     record = state_store.get_message(message_key) if message_key else None
     title, formatted_text, tags = await format_entry(source_text)
-    formatted = bool(formatted_text) and formatted_text != source_text
-    text = formatted_text if formatted else source_text
+    text = formatted_text or source_text
 
     preview = _render_preview(title, text, tags, entry_date)
     keyboard = _preview_keyboard(
         entry_id,
-        highlighted=False,
         entry_date=entry_date,
-        show_format=_can_show_format(formatted_text, formatted),
-        show_original=formatted,
         show_pagination=preview.truncated,
         preview_page=preview.page,
         page_count=preview.page_count,
@@ -1272,8 +1242,6 @@ async def _create_preview(
         "text": text,
         "tags": tags,
         "raw_text": source_text,
-        "formatted_text": formatted_text,
-        "formatted": formatted,
         "entry_date": entry_date,
         "metadata": _entry_metadata(record, source_text, bot_username=_bot_username(context)),
         "allow_duplicate": bool(record and record.get("allow_duplicate")),
@@ -1326,16 +1294,10 @@ async def entry_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         draft["allow_duplicate"] = True
         state_store.save_draft(draft)
         await _save_draft(query, context, entry_id, draft)
-    elif action == "format":
-        await _format_draft(query, context, draft)
     elif action == "roast":
         await _roast_draft(query, context, draft)
-    elif action == "unformat":
-        await _unformat_draft(query, context, draft)
     elif action == "cancel":
         await _cancel_draft(query, context, entry_id, draft)
-    elif action == "toggle_highlight":
-        await _toggle_highlight(context, draft)
     elif action == "preview_page":
         await _set_preview_page(update, context, draft)
     elif action == "pick_date":
@@ -1459,6 +1421,7 @@ async def _save_draft(query, context: ContextTypes.DEFAULT_TYPE, entry_id: str, 
             metadata=metadata,
             entry_date=draft["entry_date"],
             allow_duplicate=draft.get("allow_duplicate", False),
+            original_text=draft.get("raw_text") or draft["text"],
         )
         if result.created:
             await query.edit_message_text("✓ Saved to Notion and verified")
@@ -1485,56 +1448,11 @@ async def _save_draft(query, context: ContextTypes.DEFAULT_TYPE, entry_id: str, 
     state_store.remove_draft(entry_id)
 
 
-async def _format_draft(query, context: ContextTypes.DEFAULT_TYPE, draft: dict) -> None:
-    if draft.get("formatted"):
-        await query.message.reply_text("This draft is already formatted.")
-        return
-
-    formatted_text = draft.get("formatted_text")
-    if not formatted_text:
-        await query.message.reply_text("Formatted text is no longer available.")
-        return
-
-    draft["text"] = formatted_text
-    draft["formatted"] = True
-    draft["preview_page"] = 0
-    state_store.save_draft(draft)
-    await _edit_preview(context, draft)
-
-
-async def _unformat_draft(query, context: ContextTypes.DEFAULT_TYPE, draft: dict) -> None:
-    if not draft.get("formatted"):
-        await query.message.reply_text("This draft already shows the original text.")
-        return
-
-    raw_text = draft.get("raw_text")
-    if raw_text is None:
-        await query.message.reply_text("Original text is no longer available.")
-        return
-
-    draft["text"] = raw_text
-    draft["formatted"] = False
-    draft["preview_page"] = 0
-    state_store.save_draft(draft)
-    await _edit_preview(context, draft)
-
-
 async def _cancel_draft(query, context: ContextTypes.DEFAULT_TYPE, entry_id: str, draft: dict) -> None:
     _drafts(context).pop(entry_id, None)
     state_store.mark_message_cancelled(draft.get("message_key"))
     state_store.remove_draft(entry_id)
     await query.edit_message_text("Cancelled.")
-
-
-async def _toggle_highlight(context: ContextTypes.DEFAULT_TYPE, draft: dict) -> None:
-    highlighted = _draft_highlighted(draft)
-    if highlighted:
-        draft["title"] = draft["title"][len("⭐ "):]
-    else:
-        draft["title"] = f"⭐ {draft['title']}"
-    state_store.save_draft(draft)
-
-    await _edit_preview(context, draft)
 
 
 async def _edit_preview(context: ContextTypes.DEFAULT_TYPE, draft: dict) -> None:
@@ -1634,8 +1552,7 @@ async def receive_edit_reply(update: Update, context: ContextTypes.DEFAULT_TYPE)
         draft["title"] = user_msg.text.strip()
     elif field == "text":
         draft["text"] = user_msg.text.strip()
-        if not draft.get("formatted"):
-            draft["raw_text"] = draft["text"]
+        draft["raw_text"] = draft["text"]
     elif field == "tags":
         draft["tags"] = [t.strip() for t in user_msg.text.split(",") if t.strip()]
     draft["preview_page"] = 0
@@ -1873,7 +1790,7 @@ async def handle_weekly(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         report = await generate_weekly_report()
         if report:
             await update.effective_message.reply_text(
-                f"*Weekly highlights*\n\n{report}",
+                f"*Weekly report*\n\n{report}",
                 parse_mode="Markdown",
             )
         else:
@@ -1903,7 +1820,7 @@ async def send_weekly_report(context: ContextTypes.DEFAULT_TYPE) -> None:
         if report:
             await context.bot.send_message(
                 chat_id=settings.allowed_user_id,
-                text=f"*Weekly highlights*\n\n{report}",
+                text=f"*Weekly report*\n\n{report}",
                 parse_mode="Markdown",
             )
         else:
@@ -1981,7 +1898,7 @@ def main() -> None:
     app.add_handler(
         CallbackQueryHandler(
             entry_callback,
-            pattern="^(save|save_anyway|format|roast|unformat|cancel|toggle_highlight|preview_page|pick_date|set_date|back_to_preview|edit_title|edit_text|edit_tags):",
+            pattern="^(save|save_anyway|roast|cancel|preview_page|pick_date|set_date|back_to_preview|edit_title|edit_text|edit_tags):",
         )
     )
 

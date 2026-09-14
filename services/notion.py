@@ -20,6 +20,7 @@ SOURCE_OPTIONS = ("voice", "text")
 TELEGRAM_CHAT_ID_PROPERTY = "Telegram Chat ID"
 TELEGRAM_MESSAGE_ID_PROPERTY = "Telegram Message ID"
 SOURCE_MESSAGE_URL_PROPERTY = "Source Message URL"
+ORIGINAL_TEXT_PROPERTY = "Original Text"
 VOICE_FILE_UNIQUE_ID_PROPERTY = "Voice File Unique ID"
 AUDIO_DURATION_PROPERTY = "Audio Duration"
 AUDIO_FILE_SIZE_PROPERTY = "Audio File Size"
@@ -41,6 +42,7 @@ class NotionSchema:
     telegram_chat_id: str
     telegram_message_id: str
     source_message_url: str
+    original_text: str
     voice_file_unique_id: str
     audio_duration: str
     audio_file_size: str
@@ -220,6 +222,9 @@ async def ensure_database_schema(http: httpx.AsyncClient) -> NotionSchema:
     source_message_url_property = _ensure_database_property(
         properties, updates, SOURCE_MESSAGE_URL_PROPERTY, "url", {"url": {}}
     )
+    original_text_property = _ensure_database_property(
+        properties, updates, ORIGINAL_TEXT_PROPERTY, "rich_text", {"rich_text": {}}
+    )
     voice_file_unique_id_property = _ensure_database_property(
         properties, updates, VOICE_FILE_UNIQUE_ID_PROPERTY, "rich_text", {"rich_text": {}}
     )
@@ -250,6 +255,7 @@ async def ensure_database_schema(http: httpx.AsyncClient) -> NotionSchema:
         telegram_chat_id=telegram_chat_id_property,
         telegram_message_id=telegram_message_id_property,
         source_message_url=source_message_url_property,
+        original_text=original_text_property,
         voice_file_unique_id=voice_file_unique_id_property,
         audio_duration=audio_duration_property,
         audio_file_size=audio_file_size_property,
@@ -510,6 +516,7 @@ async def create_page(
     metadata: dict | None = None,
     entry_date: str | None = None,
     allow_duplicate: bool = False,
+    original_text: str | None = None,
 ) -> SaveResult:
     async with httpx.AsyncClient(timeout=NOTION_TIMEOUT) as http:
         schema = await ensure_database_schema(http)
@@ -529,6 +536,8 @@ async def create_page(
             },
             **_metadata_properties(schema, metadata),
         }
+        if original_text is not None:
+            properties[schema.original_text] = _rich_text_property(original_text)
         resp = await _request_with_retry(
             http,
             "post",
@@ -568,6 +577,7 @@ async def save_entry(
     metadata: dict | None = None,
     entry_date: str | None = None,
     allow_duplicate: bool = False,
+    original_text: str | None = None,
 ) -> SaveResult:
     """Creates and verifies a separate Notion database row for every diary entry."""
     return await create_page(
@@ -577,4 +587,5 @@ async def save_entry(
         metadata,
         entry_date,
         allow_duplicate=allow_duplicate,
+        original_text=original_text,
     )
