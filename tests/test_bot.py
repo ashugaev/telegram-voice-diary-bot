@@ -76,9 +76,7 @@ class PreviewRenderingTests(unittest.TestCase):
     def test_preview_keyboard_scopes_every_callback_to_entry_id(self):
         keyboard = bot._preview_keyboard(
             "entry-1",
-            highlighted=True,
             entry_date=bot._default_entry_date(),
-            show_format=True,
         )
         callback_data = [
             button.callback_data
@@ -92,9 +90,7 @@ class PreviewRenderingTests(unittest.TestCase):
                 "edit_title:entry-1",
                 "edit_text:entry-1",
                 "edit_tags:entry-1",
-                "format:entry-1",
                 "pick_date:entry-1",
-                "toggle_highlight:entry-1",
                 "roast:entry-1",
                 "save:entry-1",
                 "cancel:entry-1",
@@ -347,8 +343,6 @@ class CreatePreviewTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(fake_state_store.saved_drafts[0]["preview_msg_id"], 20)
         self.assertEqual(fake_state_store.saved_drafts[0]["entry_date"], entry_date)
         self.assertEqual(fake_state_store.saved_drafts[0]["raw_text"], "raw transcription")
-        self.assertEqual(fake_state_store.saved_drafts[0]["formatted_text"], "Body")
-        self.assertTrue(fake_state_store.saved_drafts[0]["formatted"])
         self.assertEqual(
             fake_state_store.saved_drafts[0]["metadata"]["source_message_url"],
             "https://t.me/diary_bot?start=src_123_10",
@@ -426,7 +420,6 @@ class CreatePreviewTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(callback_data[:2], ["preview_page:entry-long:0", "preview_page:entry-long:1"])
         self.assertEqual(fake_state_store.saved_drafts[0]["text"], long_formatted)
         self.assertEqual(fake_state_store.saved_drafts[0]["raw_text"], long_text)
-        self.assertEqual(fake_state_store.saved_drafts[0]["formatted_text"], long_formatted)
         self.assertEqual(fake_state_store.saved_drafts[0]["preview_page"], 0)
 
     async def test_create_preview_applies_formatted_text_by_default(self):
@@ -457,17 +450,16 @@ class CreatePreviewTests(unittest.IsolatedAsyncioTestCase):
         draft = fake_state_store.saved_drafts[0]
         self.assertEqual(draft["text"], "formatted body")
         self.assertEqual(draft["raw_text"], "raw transcription")
-        self.assertTrue(draft["formatted"])
         keyboard = fake_context.bot.edits[0]["reply_markup"]
         callback_data = [
             button.callback_data
             for row in keyboard.inline_keyboard
             for button in row
         ]
-        self.assertIn("unformat:entry-fmt", callback_data)
+        self.assertNotIn("unformat:entry-fmt", callback_data)
         self.assertNotIn("format:entry-fmt", callback_data)
 
-    async def test_create_preview_shows_format_when_formatted_text_matches_raw_text(self):
+    async def test_create_preview_hides_format_when_formatted_text_matches_raw_text(self):
         fake_state_store = FakeStateStore()
         fake_context = SimpleNamespace(
             bot=FakeEditBot(),
@@ -498,7 +490,7 @@ class CreatePreviewTests(unittest.IsolatedAsyncioTestCase):
             for row in keyboard.inline_keyboard
             for button in row
         ]
-        self.assertIn("format:entry-raw", callback_data)
+        self.assertNotIn("format:entry-raw", callback_data)
 
     async def test_create_preview_schedules_profile_refresh(self):
         fake_state_store = FakeStateStore()
@@ -658,49 +650,12 @@ class RetryProcessingFlowTests(unittest.IsolatedAsyncioTestCase):
 
 
 class FormatDraftFlowTests(unittest.IsolatedAsyncioTestCase):
-    async def test_format_draft_applies_stored_formatted_text_only(self):
-        fake_state_store = FakeStateStore()
-        fake_context = SimpleNamespace(bot=FakeEditBot(), user_data={})
-        fake_query = FakeQuery()
-        draft = {
-            "id": "entry-1",
-            "title": "Title",
-            "text": "raw transcription",
-            "raw_text": "raw transcription",
-            "formatted_text": "formatted body",
-            "formatted": False,
-            "tags": ["work"],
-            "chat_id": 123,
-            "preview_msg_id": 20,
-            "entry_date": bot._default_entry_date(),
-        }
-        fake_formatter = AsyncMock(return_value=("Other", "Other body", []))
-
-        with (
-            patch.object(bot, "format_entry", new=fake_formatter),
-            patch.object(bot, "state_store", fake_state_store),
-        ):
-            await bot._format_draft(fake_query, fake_context, draft)
-
-        fake_formatter.assert_not_awaited()
-        self.assertEqual(draft["title"], "Title")
-        self.assertEqual(draft["text"], "formatted body")
-        self.assertEqual(draft["tags"], ["work"])
-        self.assertTrue(draft["formatted"])
-        self.assertEqual(fake_state_store.saved_drafts[-1]["raw_text"], "raw transcription")
-        self.assertEqual(
-            fake_context.bot.edits[0]["text"],
-            bot._preview_text("Title", "formatted body", ["work"], draft["entry_date"]),
-        )
-
-    async def test_formatted_draft_keyboard_offers_original_instead_of_format(self):
+    async def test_formatted_draft_keyboard_hides_format_and_original(self):
         draft = {
             "id": "entry-1",
             "title": "Title",
             "text": "formatted body",
             "raw_text": "raw transcription",
-            "formatted_text": "formatted body",
-            "formatted": True,
             "tags": ["work"],
             "entry_date": bot._default_entry_date(),
         }
@@ -712,7 +667,7 @@ class FormatDraftFlowTests(unittest.IsolatedAsyncioTestCase):
             for button in row
         ]
 
-        self.assertIn("unformat:entry-1", callback_data)
+        self.assertNotIn("unformat:entry-1", callback_data)
         self.assertNotIn("format:entry-1", callback_data)
 
     async def test_unformatted_draft_keyboard_hides_format_without_formatted_text(self):
@@ -721,8 +676,6 @@ class FormatDraftFlowTests(unittest.IsolatedAsyncioTestCase):
             "title": "Title",
             "text": "raw transcription",
             "raw_text": "raw transcription",
-            "formatted_text": "",
-            "formatted": False,
             "tags": ["work"],
             "entry_date": bot._default_entry_date(),
         }
@@ -737,97 +690,6 @@ class FormatDraftFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("format:entry-1", callback_data)
         self.assertNotIn("unformat:entry-1", callback_data)
 
-    async def test_format_then_unformat_round_trip_toggles_buttons(self):
-        fake_state_store = FakeStateStore()
-        fake_context = SimpleNamespace(bot=FakeEditBot(), user_data={})
-        fake_query = FakeQuery()
-        draft = {
-            "id": "entry-1",
-            "title": "Title",
-            "text": "raw transcription",
-            "raw_text": "raw transcription",
-            "formatted_text": "formatted body",
-            "formatted": False,
-            "tags": ["work"],
-            "chat_id": 123,
-            "preview_msg_id": 20,
-            "entry_date": bot._default_entry_date(),
-        }
-
-        def callbacks():
-            keyboard = bot._preview_keyboard_for_draft(draft)
-            return [
-                button.callback_data
-                for row in keyboard.inline_keyboard
-                for button in row
-            ]
-
-        with patch.object(bot, "state_store", fake_state_store):
-            self.assertIn("format:entry-1", callbacks())
-            await bot._format_draft(fake_query, fake_context, draft)
-            self.assertEqual(draft["text"], "formatted body")
-            self.assertIn("unformat:entry-1", callbacks())
-
-            await bot._unformat_draft(fake_query, fake_context, draft)
-            self.assertEqual(draft["text"], "raw transcription")
-            self.assertIn("format:entry-1", callbacks())
-
-            await bot._format_draft(fake_query, fake_context, draft)
-            self.assertEqual(draft["text"], "formatted body")
-            self.assertTrue(draft["formatted"])
-
-    async def test_unformat_draft_warns_when_already_original(self):
-        fake_state_store = FakeStateStore()
-        fake_context = SimpleNamespace(bot=FakeEditBot(), user_data={})
-        fake_query = FakeQuery()
-        draft = {
-            "id": "entry-1",
-            "title": "Title",
-            "text": "raw transcription",
-            "raw_text": "raw transcription",
-            "formatted_text": "formatted body",
-            "formatted": False,
-            "tags": ["work"],
-            "chat_id": 123,
-            "preview_msg_id": 20,
-            "entry_date": bot._default_entry_date(),
-        }
-
-        with patch.object(bot, "state_store", fake_state_store):
-            await bot._unformat_draft(fake_query, fake_context, draft)
-
-        fake_query.message.reply_text.assert_awaited_once()
-        self.assertEqual(fake_context.bot.edits, [])
-        self.assertEqual(fake_state_store.saved_drafts, [])
-
-    async def test_unformat_draft_restores_raw_text(self):
-        fake_state_store = FakeStateStore()
-        fake_context = SimpleNamespace(bot=FakeEditBot(), user_data={})
-        fake_query = FakeQuery()
-        draft = {
-            "id": "entry-1",
-            "title": "Title",
-            "text": "formatted body",
-            "raw_text": "raw transcription",
-            "formatted_text": "formatted body",
-            "formatted": True,
-            "tags": ["work"],
-            "chat_id": 123,
-            "preview_msg_id": 20,
-            "entry_date": bot._default_entry_date(),
-        }
-
-        with patch.object(bot, "state_store", fake_state_store):
-            await bot._unformat_draft(fake_query, fake_context, draft)
-
-        self.assertEqual(draft["text"], "raw transcription")
-        self.assertFalse(draft["formatted"])
-        self.assertEqual(draft["preview_page"], 0)
-        self.assertEqual(fake_state_store.saved_drafts[-1]["text"], "raw transcription")
-        self.assertEqual(
-            fake_context.bot.edits[0]["text"],
-            bot._preview_text("Title", "raw transcription", ["work"], draft["entry_date"]),
-        )
 
 
 class DatePickerFlowTests(unittest.IsolatedAsyncioTestCase):
@@ -921,8 +783,16 @@ class SaveDraftTests(unittest.IsolatedAsyncioTestCase):
         }
         calls = []
 
-        async def failing_save_entry(title, text, tags, metadata=None, entry_date=None, allow_duplicate=False):
-            calls.append((title, text, tags, metadata, entry_date, allow_duplicate))
+        async def failing_save_entry(
+            title,
+            text,
+            tags,
+            metadata=None,
+            entry_date=None,
+            allow_duplicate=False,
+            original_text=None,
+        ):
+            calls.append((title, text, tags, metadata, entry_date, allow_duplicate, original_text))
             raise RuntimeError("notion timeout")
 
         with (
@@ -933,8 +803,9 @@ class SaveDraftTests(unittest.IsolatedAsyncioTestCase):
             await bot._save_draft(fake_query, fake_context, "entry-1", draft)
 
         self.assertFalse(draft["saving"])
-        self.assertEqual(calls[0][-2], draft["entry_date"])
-        self.assertFalse(calls[0][-1])
+        self.assertEqual(calls[0][4], draft["entry_date"])
+        self.assertFalse(calls[0][5])
+        self.assertEqual(calls[0][6], "Text")
         self.assertEqual(fake_state_store.saved_drafts[-1]["id"], "entry-1")
         self.assertEqual(fake_query.edits[0]["text"], "Saving to Notion...")
         self.assertIn("Not saved to Notion: notion timeout", fake_query.edits[1]["text"])
@@ -956,7 +827,15 @@ class SaveDraftTests(unittest.IsolatedAsyncioTestCase):
             "saving": False,
         }
 
-        async def duplicate_save_entry(title, text, tags, metadata=None, entry_date=None, allow_duplicate=False):
+        async def duplicate_save_entry(
+            title,
+            text,
+            tags,
+            metadata=None,
+            entry_date=None,
+            allow_duplicate=False,
+            original_text=None,
+        ):
             return SimpleNamespace(created=False)
 
         with (
@@ -987,8 +866,16 @@ class SaveDraftTests(unittest.IsolatedAsyncioTestCase):
         }
         calls = []
 
-        async def successful_save_entry(title, text, tags, metadata=None, entry_date=None, allow_duplicate=False):
-            calls.append((title, text, tags, metadata, entry_date, allow_duplicate))
+        async def successful_save_entry(
+            title,
+            text,
+            tags,
+            metadata=None,
+            entry_date=None,
+            allow_duplicate=False,
+            original_text=None,
+        ):
+            calls.append((title, text, tags, metadata, entry_date, allow_duplicate, original_text))
             return SimpleNamespace(created=True)
 
         with (
@@ -997,7 +884,7 @@ class SaveDraftTests(unittest.IsolatedAsyncioTestCase):
         ):
             await bot._save_draft(fake_query, fake_context, "entry-1", draft)
 
-        self.assertTrue(calls[0][-1])
+        self.assertTrue(calls[0][5])
         self.assertEqual(fake_state_store.marked_saved, ["123:10"])
 
     async def test_save_draft_enriches_old_draft_metadata_with_clickable_source_url(self):
@@ -1021,8 +908,16 @@ class SaveDraftTests(unittest.IsolatedAsyncioTestCase):
         }
         calls = []
 
-        async def successful_save_entry(title, text, tags, metadata=None, entry_date=None, allow_duplicate=False):
-            calls.append((title, text, tags, metadata, entry_date, allow_duplicate))
+        async def successful_save_entry(
+            title,
+            text,
+            tags,
+            metadata=None,
+            entry_date=None,
+            allow_duplicate=False,
+            original_text=None,
+        ):
+            calls.append((title, text, tags, metadata, entry_date, allow_duplicate, original_text))
             return SimpleNamespace(created=True)
 
         with (
@@ -1033,6 +928,44 @@ class SaveDraftTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(calls[0][3]["source_message_url"], "https://t.me/diary_bot?start=src_123_10")
         self.assertEqual(calls[0][3]["source_text_hash"], bot._source_text_hash("Text"))
+        self.assertEqual(calls[0][6], "Text")
+
+    async def test_save_draft_passes_raw_text_as_original_text(self):
+        fake_state_store = FakeStateStore()
+        fake_query = FakeQuery()
+        fake_context = SimpleNamespace(user_data={bot.DRAFTS_KEY: {"entry-1": {}}})
+        draft = {
+            "id": "entry-1",
+            "title": "Title",
+            "text": "Formatted text",
+            "raw_text": "Raw model text",
+            "tags": ["work"],
+            "entry_date": bot._default_entry_date(),
+            "message_key": "123:10",
+            "saving": False,
+        }
+        calls = []
+
+        async def successful_save_entry(
+            title,
+            text,
+            tags,
+            metadata=None,
+            entry_date=None,
+            allow_duplicate=False,
+            original_text=None,
+        ):
+            calls.append((title, text, tags, metadata, entry_date, allow_duplicate, original_text))
+            return SimpleNamespace(created=True)
+
+        with (
+            patch.object(bot, "save_entry", new=successful_save_entry),
+            patch.object(bot, "state_store", fake_state_store),
+        ):
+            await bot._save_draft(fake_query, fake_context, "entry-1", draft)
+
+        self.assertEqual(calls[0][1], "Formatted text")
+        self.assertEqual(calls[0][6], "Raw model text")
 
 
 class StatCommandTests(unittest.IsolatedAsyncioTestCase):
