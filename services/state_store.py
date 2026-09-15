@@ -14,6 +14,7 @@ MAX_RETAINED_MESSAGES = 200
 # State sections mirrored to a Notion memory page.
 PROFILE_SECTION = "profile"
 RULES_SECTION = "rules"
+CHRONOLOGY_SECTION = "chronology"
 MODE_DIARY = "diary"
 MODE_CHAT = "chat"
 UNPROCESSED_STATUSES = {"received", "processing", "failed"}
@@ -38,6 +39,7 @@ class StateStore:
                 "modes": {},
                 "profile": {"points": [], "notion_mirror": []},
                 "rules": {"items": [], "notion_mirror": []},
+                "chronology": {"items": [], "notion_mirror": []},
             }
         with self.path.open("r", encoding="utf-8") as f:
             data = json.load(f)
@@ -51,6 +53,9 @@ class StateStore:
         data.setdefault("rules", {})
         data["rules"].setdefault("items", [])
         data["rules"].setdefault("notion_mirror", [])
+        data.setdefault("chronology", {})
+        data["chronology"].setdefault("items", [])
+        data["chronology"].setdefault("notion_mirror", [])
         return data
 
     def _save(self) -> None:
@@ -254,6 +259,18 @@ class StateStore:
         self.data["rules"] = {
             "items": memory.dump(rules),
             "notion_mirror": self.data["rules"].get("notion_mirror", []),
+            "updated_at": _now(),
+        }
+        self._save()
+
+    def get_chronology(self) -> list[MemoryItem]:
+        """Dated life events the bot learned from the notes, as a timeline."""
+        return memory.load(self.data["chronology"].get("items", []))
+
+    def set_chronology(self, events: list[MemoryItem]) -> None:
+        self.data["chronology"] = {
+            "items": memory.dump(events),
+            "notion_mirror": self.data["chronology"].get("notion_mirror", []),
             "updated_at": _now(),
         }
         self._save()

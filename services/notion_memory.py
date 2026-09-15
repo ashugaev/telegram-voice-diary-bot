@@ -1,10 +1,11 @@
 """Two-way sync of the bot's long-term memory with Notion.
 
-Two pages sit next to the diary database, inside the same parent page, so the
+Three pages sit next to the diary database, inside the same parent page, so the
 memory is readable and editable in the same place as the notes:
 
   "Memory — Author profile"  durable facts about the author
   "Memory — Bot rules"       standing behavior rules the author dictated
+  "Memory — Chronology"      dated events the author lived through
 
 A page edited by hand is the source of truth: the author owns their memory, and
 what they typed into Notion outranks what the bot stored. The caller passes the
@@ -37,6 +38,7 @@ logger = logging.getLogger(__name__)
 
 AUTHOR_MEMORY_PAGE_TITLE = "Memory — Author profile"
 BOT_MEMORY_PAGE_TITLE = "Memory — Bot rules"
+CHRONOLOGY_MEMORY_PAGE_TITLE = "Memory — Chronology"
 # Notion rejects a children payload longer than this.
 NOTION_CHILDREN_CHUNK_SIZE = 100
 
@@ -208,12 +210,13 @@ async def _sync_memory_page(
 MEMORY_PAGES = (
     (AUTHOR_MEMORY_PAGE_TITLE, "facts"),
     (BOT_MEMORY_PAGE_TITLE, "rules"),
+    (CHRONOLOGY_MEMORY_PAGE_TITLE, "events"),
 )
 
 
 async def ensure_memory_pages() -> list[str]:
     """Creates any missing memory page, leaving the content of existing ones
-    alone. Run at startup so both pages are in Notion before the first sync."""
+    alone. Run at startup so every page is in Notion before the first sync."""
     async with httpx.AsyncClient(timeout=NOTION_TIMEOUT) as http:
         return [await _memory_page_id(http, title, label) for title, label in MEMORY_PAGES]
 
@@ -229,3 +232,11 @@ async def sync_bot_memory(rules: list[str], mirror: list[str]) -> MemorySync:
     dictated. Wired by whoever owns those rules in local state."""
     async with httpx.AsyncClient(timeout=NOTION_TIMEOUT) as http:
         return await _sync_memory_page(http, BOT_MEMORY_PAGE_TITLE, rules, "rules", mirror)
+
+
+async def sync_chronology_memory(events: list[str], mirror: list[str]) -> MemorySync:
+    """Syncs the chronology — the dated events the author lived through."""
+    async with httpx.AsyncClient(timeout=NOTION_TIMEOUT) as http:
+        return await _sync_memory_page(
+            http, CHRONOLOGY_MEMORY_PAGE_TITLE, events, "events", mirror,
+        )

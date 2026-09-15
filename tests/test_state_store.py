@@ -12,7 +12,7 @@ os.environ.setdefault("ALLOWED_USER_ID", "1")
 
 from services import memory
 from services import state_store as state_store_module
-from services.state_store import PROFILE_SECTION, RULES_SECTION, StateStore
+from services.state_store import CHRONOLOGY_SECTION, PROFILE_SECTION, RULES_SECTION, StateStore
 
 
 class StateStoreTests(unittest.TestCase):
@@ -84,6 +84,42 @@ class StateStoreTests(unittest.TestCase):
             stored = store.get_rules()
             self.assertEqual(memory.texts(stored), ["не задавай вопросов", "пиши коротко"])
             self.assertEqual(StateStore(path).get_rules(), stored)
+
+    def test_chronology_carries_ids_and_persists(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "state.json"
+            store = StateStore(path)
+            self.assertEqual(store.get_chronology(), [])
+
+            store.set_notion_mirror(CHRONOLOGY_SECTION, ["2026-09-15 — переехал в Лиссабон"])
+            store.set_chronology(memory.load([
+                "  2026-09-15 — переехал в Лиссабон ",
+                "",
+                "2026-09-20 — начал новый проект",
+            ]))
+            stored = store.get_chronology()
+            self.assertEqual(memory.texts(stored), [
+                "2026-09-15 — переехал в Лиссабон",
+                "2026-09-20 — начал новый проект",
+            ])
+            self.assertEqual(StateStore(path).get_chronology(), stored)
+            # Writing events must not drop what the Notion page is known to list.
+            self.assertEqual(
+                store.get_notion_mirror(CHRONOLOGY_SECTION),
+                ["2026-09-15 — переехал в Лиссабон"],
+            )
+
+    def test_state_written_before_chronology_existed_still_loads(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "state.json"
+            path.write_text(
+                json.dumps({"version": 1, "messages": {}, "drafts": {}, "rules": {"items": ["old"]}}),
+                encoding="utf-8",
+            )
+            store = StateStore(path)
+
+            self.assertEqual(store.get_chronology(), [])
+            self.assertEqual(store.get_notion_mirror(CHRONOLOGY_SECTION), [])
 
     def test_notion_mirror_persists_and_survives_a_local_rewrite(self):
         with tempfile.TemporaryDirectory() as tmpdir:

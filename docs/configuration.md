@@ -81,14 +81,15 @@ The bot works with the [Notion Journal](https://www.notion.com/help/guides/journ
 
 ### Memory pages
 
-Next to the database, inside the same parent page, the bot keeps two pages it creates on startup:
+Next to the database, inside the same parent page, the bot keeps three pages it creates on startup:
 
 | Page | Holds |
 |------|-------|
 | `Memory — Author profile` | The durable facts the bot knows about you |
 | `Memory — Bot rules` | The standing behavior rules you dictated to the bot |
+| `Memory — Chronology` | The dated events of your life, oldest to newest |
 
-Both sync in **both directions**, and a page you edited by hand wins. Each page is a bulleted list with an `Updated ... · N items` header — one bullet per item, and only the bullets count. The bot pulls before it reads its memory (every roast, `/rules`, `/memory`, and startup) and pushes after every change:
+All of them sync in **both directions**, and a page you edited by hand wins. Each page is a bulleted list with an `Updated ... · N items` header — one bullet per item, and only the bullets count. The bot pulls before it reads its memory (every roast, `/rules`, `/memory`, and startup) and pushes after every change:
 
 | On the page | What happens |
 |---|---|

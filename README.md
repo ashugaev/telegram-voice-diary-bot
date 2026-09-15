@@ -22,7 +22,7 @@ You'll need a Telegram bot token, an OpenAI API key, and a Notion integration + 
 - **🔥 Roast, your personal coach** — an honest take on your entry; reply to it to keep talking and go deeper. Tell it to behave differently and it remembers.
 - **Learns you on its own** — builds a private knowledge base about you from every note, no extra input needed, and posts one short note when it learns something or you change a rule.
 - **Summaries** — automatic daily recap and an on-demand weekly report.
-- **Memory in Notion** — the knowledge base and the behavior rules you gave it live on their own pages next to your diary database. Edit a page by hand and the bot adopts your version.
+- **Memory in Notion** — the knowledge base, the dated timeline of your life, and the behavior rules you gave it live on their own pages next to your diary database. Edit a page by hand and the bot adopts your version.
 
 ## Commands
 

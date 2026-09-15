@@ -322,6 +322,7 @@ class CreatePreviewTests(unittest.IsolatedAsyncioTestCase):
             patch.object(bot, "_new_entry_id", return_value="entry-1"),
             patch.object(bot, "state_store", fake_state_store),
             patch.object(bot, "_update_profile_points", new=AsyncMock()),
+            patch.object(bot, "_update_chronology", new=AsyncMock()),
         ):
             await bot._create_preview(
                 source_message,
@@ -370,6 +371,7 @@ class CreatePreviewTests(unittest.IsolatedAsyncioTestCase):
             patch.object(bot, "_new_entry_id", return_value="entry-2"),
             patch.object(bot, "state_store", fake_state_store),
             patch.object(bot, "_update_profile_points", new=AsyncMock()),
+            patch.object(bot, "_update_chronology", new=AsyncMock()),
         ):
             await bot._create_preview(source_message, fake_context, "plain text")
 
@@ -398,6 +400,7 @@ class CreatePreviewTests(unittest.IsolatedAsyncioTestCase):
             patch.object(bot, "_new_entry_id", return_value="entry-long"),
             patch.object(bot, "state_store", fake_state_store),
             patch.object(bot, "_update_profile_points", new=AsyncMock()),
+            patch.object(bot, "_update_chronology", new=AsyncMock()),
         ):
             await bot._create_preview(
                 source_message,
@@ -438,6 +441,7 @@ class CreatePreviewTests(unittest.IsolatedAsyncioTestCase):
             patch.object(bot, "_new_entry_id", return_value="entry-fmt"),
             patch.object(bot, "state_store", fake_state_store),
             patch.object(bot, "_update_profile_points", new=AsyncMock()),
+            patch.object(bot, "_update_chronology", new=AsyncMock()),
         ):
             await bot._create_preview(
                 source_message,
@@ -475,6 +479,7 @@ class CreatePreviewTests(unittest.IsolatedAsyncioTestCase):
             patch.object(bot, "_new_entry_id", return_value="entry-raw"),
             patch.object(bot, "state_store", fake_state_store),
             patch.object(bot, "_update_profile_points", new=AsyncMock()),
+            patch.object(bot, "_update_chronology", new=AsyncMock()),
         ):
             await bot._create_preview(
                 source_message,
@@ -508,6 +513,7 @@ class CreatePreviewTests(unittest.IsolatedAsyncioTestCase):
             patch.object(bot, "_new_entry_id", return_value="entry-refresh"),
             patch.object(bot, "state_store", fake_state_store),
             patch.object(bot, "_update_profile_points", new=AsyncMock()) as fake_update,
+            patch.object(bot, "_update_chronology", new=AsyncMock()),
         ):
             await bot._create_preview(
                 source_message,
@@ -517,9 +523,37 @@ class CreatePreviewTests(unittest.IsolatedAsyncioTestCase):
                 preview_message=processing_message,
             )
 
-        self.assertEqual(len(fake_context.application.created_tasks), 1)
+        self.assertEqual(len(fake_context.application.created_tasks), 2)
         # The preview message carries the note about whatever the entry taught.
         fake_update.assert_called_once_with("plain text", processing_message)
+
+    async def test_create_preview_schedules_chronology_refresh(self):
+        fake_state_store = FakeStateStore()
+        fake_context = SimpleNamespace(
+            bot=FakeEditBot(),
+            user_data={},
+            application=FakeApplication(close_coroutines=True),
+        )
+        source_message = SimpleNamespace(chat_id=123, message_id=10)
+        processing_message = SimpleNamespace(chat_id=123, message_id=20)
+        fake_formatter = AsyncMock(return_value=("Title", "Body", []))
+
+        with (
+            patch.object(bot, "format_entry", new=fake_formatter),
+            patch.object(bot, "_new_entry_id", return_value="entry-chrono"),
+            patch.object(bot, "state_store", fake_state_store),
+            patch.object(bot, "_update_profile_points", new=AsyncMock()),
+            patch.object(bot, "_update_chronology", new=AsyncMock()) as fake_chronology,
+        ):
+            await bot._create_preview(
+                source_message,
+                fake_context,
+                "plain text",
+                message_key="123:10",
+                preview_message=processing_message,
+            )
+
+        fake_chronology.assert_called_once_with("plain text", processing_message)
 
 
 class DuplicateVoiceFlowTests(unittest.IsolatedAsyncioTestCase):
@@ -1308,20 +1342,23 @@ class FakeRoastBot:
 
 
 class MemoryNoteTests(unittest.TestCase):
-    def test_note_carries_both_blocks(self):
+    def test_note_carries_every_block(self):
         note = bot._render_memory_note(
             (bot.PROFILE_BLOCK_LABEL, ["+ играет в пинг-понг"]),
+            (bot.CHRONOLOGY_BLOCK_LABEL, ["+ 2026-09-15 — переехал в Лиссабон"]),
             (bot.RULES_BLOCK_LABEL, ["+ пиши коротко", "− будь мягче"]),
         )
         self.assertEqual(note, (
             "🧠 Memory updated\n"
             "About you:\n+ играет в пинг-понг\n"
+            "Chronology:\n+ 2026-09-15 — переехал в Лиссабон\n"
             "Rules:\n+ пиши коротко\n− будь мягче"
         ))
 
     def test_empty_block_is_dropped(self):
         note = bot._render_memory_note(
             (bot.PROFILE_BLOCK_LABEL, []),
+            (bot.CHRONOLOGY_BLOCK_LABEL, []),
             (bot.RULES_BLOCK_LABEL, ["+ пиши коротко"]),
         )
         self.assertEqual(note, "🧠 Memory updated\nRules:\n+ пиши коротко")
@@ -1329,7 +1366,9 @@ class MemoryNoteTests(unittest.TestCase):
     def test_nothing_changed_means_no_note(self):
         self.assertIsNone(
             bot._render_memory_note(
-                (bot.PROFILE_BLOCK_LABEL, []), (bot.RULES_BLOCK_LABEL, [])
+                (bot.PROFILE_BLOCK_LABEL, []),
+                (bot.CHRONOLOGY_BLOCK_LABEL, []),
+                (bot.RULES_BLOCK_LABEL, []),
             )
         )
 
@@ -1423,7 +1462,7 @@ class RoastFlowTests(unittest.IsolatedAsyncioTestCase):
         captured_points = []
         captured_rules = []
 
-        async def fake_roast(messages, points=None, rules=None):
+        async def fake_roast(messages, points=None, rules=None, chronology=None):
             captured.append([dict(m) for m in messages])
             captured_points.append(points)
             captured_rules.append(rules)
@@ -1435,7 +1474,8 @@ class RoastFlowTests(unittest.IsolatedAsyncioTestCase):
                 patch.object(bot.state_store, "get_rules", return_value=_items("будь короче")), \
                 patch.object(bot.state_store, "set_rules") as save_rules, \
                 patch.object(bot, "_sync_memory", new=AsyncMock()) as pulled, \
-                patch.object(bot, "_update_profile_points", new=AsyncMock()) as fake_update:
+                patch.object(bot, "_update_profile_points", new=AsyncMock()) as fake_update, \
+                patch.object(bot, "_update_chronology", new=AsyncMock()):
             await bot._roast_draft(query, context, draft)
 
         # Memory is pulled from Notion before it is read, so a hand-edited page
@@ -1471,7 +1511,8 @@ class RoastFlowTests(unittest.IsolatedAsyncioTestCase):
                 patch.object(bot.state_store, "set_rules", save_rules), \
                 patch.object(bot, "_sync_memory", new=AsyncMock()), \
                 patch.object(bot, "_sync_bot_memory", new=AsyncMock()) as self.mirror, \
-                patch.object(bot, "_update_profile_points", new=AsyncMock()):
+                patch.object(bot, "_update_profile_points", new=AsyncMock()), \
+                patch.object(bot, "_update_chronology", new=AsyncMock()):
             await bot._roast_draft(query, context, {"id": "e", "text": "entry", "chat_id": 123})
         return fake_bot
 
@@ -1625,7 +1666,7 @@ class RoastFlowTests(unittest.IsolatedAsyncioTestCase):
         context = SimpleNamespace(bot=fake_bot, user_data={})
         captured = []
 
-        async def fake_roast(messages, points=None, rules=None):
+        async def fake_roast(messages, points=None, rules=None, chronology=None):
             captured.append([dict(message) for message in messages])
             return _roast_reply("updated")
 
@@ -1658,6 +1699,80 @@ class RoastFlowTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(fake_bot.sent, [])
         self.assertEqual(bot._roast_chains, {})
+
+    async def test_update_chronology_extracts_persists_and_mirrors(self):
+        with patch.object(bot.state_store, "get_chronology", return_value=_items("2026-01-01 — начал проект")), \
+                patch.object(bot.roast, "extract_chronology_events", new=AsyncMock(return_value=_items("2026-09-15 — переехал"))) as extract, \
+                patch.object(bot, "_sync_chronology_memory", new=AsyncMock()) as pull, \
+                patch.object(bot, "_sync_chronology_memory_held", new=AsyncMock()) as push, \
+                patch.object(bot.state_store, "set_chronology") as save:
+            await bot._update_chronology("today's entry")
+
+        extract.assert_awaited_once_with("today's entry", _items("2026-01-01 — начал проект"))
+        save.assert_called_once_with(_items("2026-09-15 — переехал"))
+        pull.assert_awaited_once()
+        push.assert_awaited_once()
+
+    async def test_a_chronology_moved_while_extracting_drops_the_pass(self):
+        moved = [_items("2026-01-01 — начал проект"), _items("typed by hand")]
+
+        with patch.object(bot.state_store, "get_chronology", side_effect=moved), \
+                patch.object(bot.roast, "extract_chronology_events", new=AsyncMock(return_value=_items("2026-09-15 — переехал"))), \
+                patch.object(bot, "_sync_chronology_memory", new=AsyncMock()), \
+                patch.object(bot, "_sync_chronology_memory_held", new=AsyncMock()) as push, \
+                patch.object(bot.state_store, "set_chronology") as save:
+            await bot._update_chronology("today's entry")
+
+        save.assert_not_called()
+        push.assert_not_awaited()
+
+    async def test_chronology_note_lists_gained_and_lost_events(self):
+        fake_bot = FakeRoastBot()
+        target = SimpleNamespace(chat_id=123, message_id=20, get_bot=lambda: fake_bot)
+        before = _items("2026-01-01 — начал проект", "2026-02-01 — ошибочное событие")
+        after = _items("2026-01-01 — начал проект", "2026-09-15 — переехал в Лиссабон")
+
+        with patch.object(bot.state_store, "get_chronology", return_value=before), \
+                patch.object(bot.roast, "extract_chronology_events", new=AsyncMock(return_value=after)), \
+                patch.object(bot, "_sync_chronology_memory", new=AsyncMock()), \
+                patch.object(bot, "_sync_chronology_memory_held", new=AsyncMock()), \
+                patch.object(bot.state_store, "set_chronology"):
+            await bot._update_chronology("today's entry", target)
+
+        note = (
+            "🧠 Memory updated\nChronology:\n"
+            "+ 2026-09-15 — переехал в Лиссабон\n− 2026-02-01 — ошибочное событие"
+        )
+        self.assertEqual(fake_bot.sent[-1]["text"], note)
+        # The note continues as a normal roast thread.
+        self.assertEqual(bot._roast_chains["123:1001"], [
+            {"role": "user", "content": "today's entry"},
+            {"role": "assistant", "content": note},
+        ])
+
+    async def test_roast_passes_stored_chronology_to_the_model(self):
+        fake_bot = FakeRoastBot()
+        query = SimpleNamespace(
+            message=SimpleNamespace(chat_id=123, message_id=20, get_bot=lambda: fake_bot, reply_text=AsyncMock()),
+        )
+        context = SimpleNamespace(bot=fake_bot, user_data={})
+        captured = []
+
+        async def fake_roast(messages, points=None, rules=None, chronology=None):
+            captured.append(chronology)
+            return _roast_reply("Roast ready.")
+
+        with patch.object(bot.roast, "is_configured", lambda: True), \
+                patch.object(bot.roast, "roast", new=fake_roast), \
+                patch.object(bot.state_store, "get_profile_points", return_value=[]), \
+                patch.object(bot.state_store, "get_rules", return_value=[]), \
+                patch.object(bot.state_store, "get_chronology", return_value=_items("2026-09-15 — переехал")), \
+                patch.object(bot, "_sync_memory", new=AsyncMock()), \
+                patch.object(bot, "_update_profile_points", new=AsyncMock()), \
+                patch.object(bot, "_update_chronology", new=AsyncMock()):
+            await bot._roast_draft(query, context, {"id": "e", "text": "entry", "chat_id": 123})
+
+        self.assertEqual(captured, [_items("2026-09-15 — переехал")])
 
     async def test_update_profile_points_swallows_failures(self):
         with patch.object(bot.state_store, "get_profile_points", return_value=[]), \
@@ -1692,7 +1807,7 @@ class RoastFlowTests(unittest.IsolatedAsyncioTestCase):
 
         captured = []
 
-        async def fake_roast(messages, points=None, rules=None):
+        async def fake_roast(messages, points=None, rules=None, chronology=None):
             captured.append([dict(m) for m in messages])
             return _roast_reply("answer to the question")
 
@@ -1732,7 +1847,8 @@ class RoastFlowTests(unittest.IsolatedAsyncioTestCase):
                 patch.object(bot.state_store, "get_profile_points", return_value=[]), \
                 patch.object(bot.state_store, "get_rules", return_value=[]), \
                 patch.object(bot, "_sync_memory", new=AsyncMock()) as sync_memory, \
-                patch.object(bot, "_update_profile_points", new=AsyncMock()):
+                patch.object(bot, "_update_profile_points", new=AsyncMock()), \
+                patch.object(bot, "_update_chronology", new=AsyncMock()):
             await bot._roast_draft(query, context, draft)
 
         sync_memory.assert_awaited_once()
@@ -1790,7 +1906,7 @@ class RoastFlowTests(unittest.IsolatedAsyncioTestCase):
 
         captured = []
 
-        async def fake_roast(messages, points=None, rules=None):
+        async def fake_roast(messages, points=None, rules=None, chronology=None):
             captured.append([dict(m) for m in messages])
             return _roast_reply("answer to the spoken question")
 
@@ -2323,21 +2439,24 @@ class MemorySyncTests(unittest.IsolatedAsyncioTestCase):
         sync.assert_awaited_once()
         self.assertIn("typed by hand", message.reply_text.await_args.args[0])
 
-    async def test_startup_pulls_both_pages(self):
+    async def test_startup_pulls_every_page(self):
         application = SimpleNamespace(bot=SimpleNamespace(set_my_commands=AsyncMock()))
 
         with patch.object(bot.notion_memory, "ensure_memory_pages", new=AsyncMock()), \
                 patch.object(bot, "_sync_author_memory_held", new=AsyncMock()) as author, \
                 patch.object(bot, "_sync_bot_memory_held", new=AsyncMock()) as rules, \
+                patch.object(bot, "_sync_chronology_memory_held", new=AsyncMock()) as chronology, \
                 patch.object(bot, "replay_unprocessed_messages", new=AsyncMock()):
             await bot.post_init(application)
 
         author.assert_awaited_once()
         rules.assert_awaited_once()
+        chronology.assert_awaited_once()
 
     async def test_a_second_pull_inside_the_window_reuses_the_first(self):
         with patch.object(bot, "_sync_author_memory_held", new=AsyncMock()) as author, \
-                patch.object(bot, "_sync_bot_memory_held", new=AsyncMock()):
+                patch.object(bot, "_sync_bot_memory_held", new=AsyncMock()), \
+                patch.object(bot, "_sync_chronology_memory_held", new=AsyncMock()):
             await bot._sync_memory()
             await bot._sync_memory()
 
@@ -2349,14 +2468,16 @@ class MemorySyncTests(unittest.IsolatedAsyncioTestCase):
         # small number and must not read as a pull that just happened.
         with patch.object(bot, "monotonic", return_value=1.0), \
                 patch.object(bot, "_sync_author_memory_held", new=AsyncMock()) as author, \
-                patch.object(bot, "_sync_bot_memory_held", new=AsyncMock()):
+                patch.object(bot, "_sync_bot_memory_held", new=AsyncMock()), \
+                patch.object(bot, "_sync_chronology_memory_held", new=AsyncMock()):
             await bot._sync_memory()
 
         author.assert_awaited_once()
 
     async def test_an_expired_window_pulls_again(self):
         with patch.object(bot, "_sync_author_memory_held", new=AsyncMock()) as author, \
-                patch.object(bot, "_sync_bot_memory_held", new=AsyncMock()):
+                patch.object(bot, "_sync_bot_memory_held", new=AsyncMock()), \
+                patch.object(bot, "_sync_chronology_memory_held", new=AsyncMock()):
             await bot._sync_memory()
             bot._last_memory_pull -= bot.MEMORY_PULL_TTL_SECONDS
             await bot._sync_memory()
@@ -2366,7 +2487,8 @@ class MemorySyncTests(unittest.IsolatedAsyncioTestCase):
     async def test_explicit_reads_ignore_the_window(self):
         # /rules and /memory ask for the current list, so they always pull.
         with patch.object(bot, "_sync_bot_memory_held", new=AsyncMock()) as rules, \
-                patch.object(bot, "_sync_author_memory_held", new=AsyncMock()):
+                patch.object(bot, "_sync_author_memory_held", new=AsyncMock()), \
+                patch.object(bot, "_sync_chronology_memory_held", new=AsyncMock()):
             await bot._sync_memory()
             await bot._sync_bot_memory()
 
@@ -2384,7 +2506,8 @@ class MemorySyncTests(unittest.IsolatedAsyncioTestCase):
             running -= 1
 
         with patch.object(bot, "_sync_author_memory_held", new=slow_sync), \
-                patch.object(bot, "_sync_bot_memory_held", new=AsyncMock()):
+                patch.object(bot, "_sync_bot_memory_held", new=AsyncMock()), \
+                patch.object(bot, "_sync_chronology_memory_held", new=AsyncMock()):
             await asyncio.gather(
                 bot._sync_author_memory(),
                 bot._sync_author_memory(),
@@ -2476,14 +2599,15 @@ class ChatModeFlowTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(bot.state_store, "get_mode", return_value="chat"), \
                 patch.object(bot.state_store, "record_text") as mock_record, \
                 patch.object(bot, "_run_roast", new=AsyncMock()) as mock_roast, \
-                patch.object(bot, "_update_profile_points", new=AsyncMock()) as mock_profile:
+                patch.object(bot, "_update_profile_points", new=AsyncMock()) as mock_profile, \
+                patch.object(bot, "_update_chronology", new=AsyncMock()):
             await bot.handle_text(update, context)
 
             mock_record.assert_not_called()
             mock_roast.assert_awaited_once()
             args = mock_roast.await_args[0]
             self.assertEqual(args[1], [{"role": "user", "content": "my thoughts today"}])
-            self.assertEqual(len(created_tasks), 1)
+            self.assertEqual(len(created_tasks), 2)
 
     async def test_chat_mode_voice_transcribes_and_roasts_without_draft(self):
         created_tasks = []
@@ -2514,5 +2638,5 @@ class ChatModeFlowTests(unittest.IsolatedAsyncioTestCase):
             mock_roast.assert_awaited_once()
             args = mock_roast.await_args[0]
             self.assertEqual(args[1], [{"role": "user", "content": "spoken thoughts"}])
-            self.assertEqual(len(created_tasks), 1)
+            self.assertEqual(len(created_tasks), 2)
 
