@@ -38,10 +38,10 @@ Nothing is written to Notion until you press **Save**. If saving fails, the prev
 
 ## Modes: Diary vs Chat (пиздеж)
 
-The bot has two persistent modes, switchable via the bottom keyboard buttons (`📖 Diary` / `🔥 Chat`) or commands (`/diary` / `/chat`):
+The bot has two persistent modes, switchable via the single toggle button at the bottom of the screen (`🔥 Включить пиздеж` when in diary mode, `📖 Включить дневник` when in chat mode) or commands (`/diary` / `/chat`):
 
 1. **📖 Diary (default)** — Voice or text messages are formatted, tagged, previewed, and saved to Notion upon clicking **Save**.
-2. **🔥 Chat (пиздеж)** — Direct conversation with the roast persona. Messages receive immediate roast responses and do NOT create Notion drafts or entries. Memory updates (author profile and behavior rules) continue working as usual.
+2. **🔥 Chat (пиздеж)** — Direct ongoing conversation with the roast persona. Messages are kept raw (unformatted), receive immediate roast responses, and do NOT create Notion drafts or entries. Memory updates (author profile and behavior rules) continue working as usual. The conversation accumulates across messages; at 30 messages it automatically summarizes the earlier dialogue into a compact recap and keeps the latest 10 messages. Switching to Diary mode resets the chat conversation history.
 
 ## 🔥 Roast mode (разъёб)
 

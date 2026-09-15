@@ -479,6 +479,25 @@ class RulesBlockTests(unittest.TestCase):
         self.assertNotIn(roast.RULES_MARKER, text)
 
 
+class SummarizeConversationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_summarize_conversation_calls_model_with_dialogue(self):
+        fake = FakeOpenAI(_chat_response("Summary of chat"))
+        messages = [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "hi there"},
+        ]
+
+        with patch.object(roast.settings, "ai_api_key", "key"), \
+                patch.object(roast, "client", fake):
+            result = await roast.summarize_conversation(messages)
+
+        self.assertEqual(result, "Summary of chat")
+        kwargs = fake.chat.completions.calls[0]
+        self.assertEqual(kwargs["messages"][0]["content"], roast.SUMMARIZE_SYSTEM_PROMPT)
+        self.assertIn("Author: hello", kwargs["messages"][1]["content"])
+        self.assertIn("Assistant: hi there", kwargs["messages"][1]["content"])
+
+
 class ConfigTests(unittest.TestCase):
     def test_is_configured_reflects_api_key(self):
         with patch.object(roast.settings, "ai_api_key", "key"):

@@ -371,3 +371,28 @@ async def extract_chronology_events(
         ],
     )
     return _merge_extraction(response, existing, "Chronology")
+
+
+SUMMARIZE_SYSTEM_PROMPT = """Ты кратко и емко суммаризируешь предыдущую часть переписки между пользователем и его братаном/коучем (roast bot).
+Выдели ключевые темы, о чем спорили, что обсуждали, какие выводы сделал автор или бот.
+Суммаризация должна быть плотной, без воды, на русском языке, в виде связного текста на 1-2 коротких абзаца.
+Не придумывай ничего нового, только факты из переписки."""
+
+
+async def summarize_conversation(messages: list[dict]) -> str:
+    """Compress an earlier segment of chat conversation into a dense summary."""
+    if not is_configured():
+        raise RuntimeError("AI provider API key is not configured")
+
+    formatted = "\n\n".join(
+        f"{'Author' if m.get('role') == 'user' else 'Assistant'}: {m.get('content', '')}"
+        for m in messages
+    )
+    response = await client.chat.completions.create(
+        model=settings.roast_model,
+        messages=[
+            {"role": "system", "content": SUMMARIZE_SYSTEM_PROMPT},
+            {"role": "user", "content": f"Суммаризируй эту часть диалога:\n\n{formatted}"},
+        ],
+    )
+    return _extract_text(response)
