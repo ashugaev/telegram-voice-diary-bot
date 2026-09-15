@@ -90,8 +90,14 @@ _last_memory_pull: float | None = None
 # Intentionally not persisted: chains are discarded on restart.
 _roast_chains: dict[str, list[dict]] = {}
 
-KEYBOARD_DIARY_BUTTON = "📖 Diary"
-KEYBOARD_CHAT_BUTTON = "🔥 Chat"
+# In-memory ongoing conversation chains for Chat mode, keyed by chat_id.
+# Reset whenever switching into Diary mode or back.
+_chat_mode_chains: dict[int, list[dict]] = {}
+CHAT_MODE_MAX_MESSAGES = 30
+CHAT_MODE_RETAIN_MESSAGES = 10
+
+KEYBOARD_TO_CHAT_BUTTON = "🔥 Включить пиздеж"
+KEYBOARD_TO_DIARY_BUTTON = "📖 Включить дневник"
 DIARY_MODE_TOKENS = {
     "📖 diary",
     "diary",
@@ -100,6 +106,8 @@ DIARY_MODE_TOKENS = {
     "📖 дневник",
     "режим дневник",
     "режим дневника",
+    "📖 включить дневник",
+    "включить дневник",
 }
 CHAT_MODE_TOKENS = {
     "🔥 chat",
@@ -114,12 +122,17 @@ CHAT_MODE_TOKENS = {
     "🔥 roast",
     "roast",
     "/roast",
+    "🔥 включить пиздеж",
+    "🔥 включить пиздёж",
+    "включить пиздеж",
+    "включить пиздёж",
 }
 
 
-def _main_reply_keyboard() -> ReplyKeyboardMarkup:
+def _main_reply_keyboard(current_mode: str = MODE_DIARY) -> ReplyKeyboardMarkup:
+    button_text = KEYBOARD_TO_CHAT_BUTTON if current_mode == MODE_DIARY else KEYBOARD_TO_DIARY_BUTTON
     return ReplyKeyboardMarkup(
-        [[KeyboardButton(KEYBOARD_DIARY_BUTTON), KeyboardButton(KEYBOARD_CHAT_BUTTON)]],
+        [[KeyboardButton(button_text)]],
         resize_keyboard=True,
         is_persistent=True,
     )
@@ -1006,9 +1019,11 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await _send_source_jump(update, context, *source)
         return
 
+    chat_id = _message_chat_id(update.effective_message)
+    current_mode = state_store.get_mode(chat_id)
     await update.effective_message.reply_text(
         WELCOME_TEXT,
-        reply_markup=_main_reply_keyboard(),
+        reply_markup=_main_reply_keyboard(current_mode),
     )
 
 
@@ -1035,28 +1050,32 @@ async def _send_source_jump(
 
 
 async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = _message_chat_id(update.effective_message)
+    current_mode = state_store.get_mode(chat_id)
     await update.effective_message.reply_text(
         HELP_TEXT,
         parse_mode="Markdown",
-        reply_markup=_main_reply_keyboard(),
+        reply_markup=_main_reply_keyboard(current_mode),
     )
 
 
 async def handle_diary_mode(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = _message_chat_id(update.effective_message)
     state_store.set_mode(chat_id, MODE_DIARY)
+    _chat_mode_chains.pop(chat_id, None)
     await update.effective_message.reply_text(
-        "📖 Diary mode active. Voice or text messages will be formatted and previewed for Notion.",
-        reply_markup=_main_reply_keyboard(),
+        "📖 Режим дневника включен. Голосовые и текстовые сообщения форматируются и готовятся к сохранению в Notion.",
+        reply_markup=_main_reply_keyboard(MODE_DIARY),
     )
 
 
 async def handle_chat_mode(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = _message_chat_id(update.effective_message)
     state_store.set_mode(chat_id, MODE_CHAT)
+    _chat_mode_chains.pop(chat_id, None)
     await update.effective_message.reply_text(
-        "🔥 Chat mode active (пиздеж). Messages get instant roast replies and won't go to Notion. Memory updates as usual.",
-        reply_markup=_main_reply_keyboard(),
+        "🔥 Режим пиздежа включен. Сообщения идут в постоянный диалог с коучем и не сохраняются в Notion. Память обновляется штатно.",
+        reply_markup=_main_reply_keyboard(MODE_CHAT),
     )
 
 
@@ -1145,6 +1164,28 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     )
 
 
+async def _prepare_chat_chain(chat_id: int, new_user_text: str) -> list[dict]:
+    chain = list(_chat_mode_chains.get(chat_id, []))
+    chain.append({"role": "user", "content": new_user_text})
+
+    if len(chain) >= CHAT_MODE_MAX_MESSAGES:
+        to_summarize = chain[:-CHAT_MODE_RETAIN_MESSAGES]
+        tail = chain[-CHAT_MODE_RETAIN_MESSAGES:]
+        try:
+            summary = await roast.summarize_conversation(to_summarize)
+            if summary:
+                chain = [
+                    {
+                        "role": "system",
+                        "content": f"Краткое содержание предыдущей части разговора:\n{summary.strip()}",
+                    }
+                ] + tail
+        except Exception:
+            logger.exception("Error summarizing chat conversation")
+
+    return chain
+
+
 async def _handle_chat_mode_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.effective_message
     user_text = (message.text or "").strip()
@@ -1155,9 +1196,11 @@ async def _handle_chat_mode_text(update: Update, context: ContextTypes.DEFAULT_T
         await message.reply_text("🔥 Chat is unavailable: set AI provider API key in .env.")
         return
 
+    chat_id = _message_chat_id(message)
     status = await _reply_to_source(message, "🔥 Thinking...")
-    chain = [{"role": "user", "content": user_text}]
+    chain = await _prepare_chat_chain(chat_id, user_text)
     await _run_roast(message, chain, context, status_message=status)
+    _chat_mode_chains[chat_id] = chain
     context.application.create_task(_update_profile_points(user_text, message))
 
 
@@ -1189,8 +1232,10 @@ async def _handle_chat_mode_voice(update: Update, context: ContextTypes.DEFAULT_
         user_text,
     )
     await _edit_reply_message(context, status, "🔥 Thinking...")
-    chain = [{"role": "user", "content": user_text}]
+    chat_id = _message_chat_id(message)
+    chain = await _prepare_chat_chain(chat_id, user_text)
     await _run_roast(message, chain, context, status_message=status)
+    _chat_mode_chains[chat_id] = chain
     context.application.create_task(_update_profile_points(user_text, message))
 
 
