@@ -39,7 +39,14 @@ from services import memory, notion_memory, profile_rebuild, roast
 from services.diary_dates import diary_today
 from services.formatter import format_entry
 from services.notion import save_entry
-from services.state_store import MODE_CHAT, MODE_DIARY, PROFILE_SECTION, RULES_SECTION, state_store
+from services.state_store import (
+    CHRONOLOGY_SECTION,
+    MODE_CHAT,
+    MODE_DIARY,
+    PROFILE_SECTION,
+    RULES_SECTION,
+    state_store,
+)
 from services.stats import build_audio_stats, format_audio_stats
 from services.summary import generate_daily_summary, generate_weekly_report
 from services.whisper import transcribe
@@ -76,6 +83,7 @@ MEMORY_PULL_TTL_SECONDS = 60
 MEMORY_NOTE_HEADER = "🧠 Memory updated"
 PROFILE_BLOCK_LABEL = "About you"
 RULES_BLOCK_LABEL = "Rules"
+CHRONOLOGY_BLOCK_LABEL = "Chronology"
 
 # Memory is read-modify-written from a roast, a background profile extraction and
 # startup, against both local state and Notion. One lock covers all of it, so
@@ -740,6 +748,11 @@ async def _sync_bot_memory() -> None:
         await _sync_bot_memory_held()
 
 
+async def _sync_chronology_memory() -> None:
+    async with _memory_lock:
+        await _sync_chronology_memory_held()
+
+
 async def _sync_author_memory_held() -> None:
     """Best-effort two-way sync of the author profile with its Notion page. A
     page edited by hand wins, so run this before reading the profile too.
@@ -777,11 +790,28 @@ async def _sync_bot_memory_held() -> None:
     state_store.set_notion_mirror(RULES_SECTION, result.items)
 
 
+async def _sync_chronology_memory_held() -> None:
+    """Best-effort two-way sync of the chronology with its Notion page.
+    Caller holds `_memory_lock`."""
+    events = state_store.get_chronology()
+    try:
+        result = await notion_memory.sync_chronology_memory(
+            memory.texts(events),
+            state_store.get_notion_mirror(CHRONOLOGY_SECTION),
+        )
+    except Exception:
+        logger.exception("Failed to sync the chronology with Notion")
+        return
+    if result.adopted:
+        state_store.set_chronology(memory.adopt(events, result.items))
+    state_store.set_notion_mirror(CHRONOLOGY_SECTION, result.items)
+
+
 async def _sync_memory() -> None:
-    """Pull hand edits from both memory pages before a roast reads its memory.
+    """Pull hand edits from every memory page before a roast reads its memory.
 
     Throttled: a roast is a conversation, and every follow-up turn would
-    otherwise cost two Notion reads. Explicit reads — /rules, /memory, startup —
+    otherwise cost a Notion read per page. Explicit reads — /rules, /memory, startup —
     call the per-page syncs directly and always pull."""
     global _last_memory_pull
     # Checked before the lock, so a throttled turn waits on nothing.
@@ -790,6 +820,7 @@ async def _sync_memory() -> None:
     async with _memory_lock:
         await _sync_author_memory_held()
         await _sync_bot_memory_held()
+        await _sync_chronology_memory_held()
         _last_memory_pull = monotonic()
 
 
@@ -831,6 +862,43 @@ async def _update_profile_points(diary_text: str, reply_target=None) -> None:
                 _store_roast_chain(_message_chat_id(message), message.message_id, chain)
     except Exception:
         logger.exception("Failed to post the profile update note")
+
+
+async def _update_chronology(diary_text: str, reply_target=None) -> None:
+    """Best-effort: fold a diary entry into the dated chronology. Never blocks or
+    breaks the roast flow — failures are logged and swallowed.
+
+    `reply_target` is the message the note about the new events replies to. An
+    entry with nothing worth a timeline sends nothing."""
+    await _sync_chronology_memory()
+    existing = state_store.get_chronology()
+    try:
+        events = await roast.extract_chronology_events(diary_text, existing)
+    except Exception:
+        logger.exception("Failed to update the chronology")
+        return
+    async with _memory_lock:
+        if state_store.get_chronology() != existing:
+            logger.info("Chronology moved while extracting; dropping this pass")
+            return
+        state_store.set_chronology(events)
+        await _sync_chronology_memory_held()
+    if reply_target is None:
+        return
+    # Outside the lock: a Telegram send must never hold memory.
+    try:
+        note, sent = await _send_memory_note(
+            reply_target, (CHRONOLOGY_BLOCK_LABEL, _memory_diff_lines(existing, events))
+        )
+        if sent:
+            chain = [
+                {"role": "user", "content": diary_text},
+                {"role": "assistant", "content": note},
+            ]
+            for message in sent:
+                _store_roast_chain(_message_chat_id(message), message.message_id, chain)
+    except Exception:
+        logger.exception("Failed to post the chronology update note")
 
 
 def _memory_diff_lines(
@@ -899,8 +967,9 @@ async def _run_roast(reply_target, chain: list[dict], context, status_message=No
     await _sync_memory()
     points = state_store.get_profile_points()
     rules = state_store.get_rules()
+    chronology = state_store.get_chronology()
     try:
-        reply = await roast.roast(chain, points=points, rules=rules)
+        reply = await roast.roast(chain, points=points, rules=rules, chronology=chronology)
     except Exception as e:
         logger.exception("Error generating roast")
         error_text = f"Roast failed: {e}"
@@ -1202,6 +1271,7 @@ async def _handle_chat_mode_text(update: Update, context: ContextTypes.DEFAULT_T
     await _run_roast(message, chain, context, status_message=status)
     _chat_mode_chains[chat_id] = chain
     context.application.create_task(_update_profile_points(user_text, message))
+    context.application.create_task(_update_chronology(user_text, message))
 
 
 async def _handle_chat_mode_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1237,6 +1307,7 @@ async def _handle_chat_mode_voice(update: Update, context: ContextTypes.DEFAULT_
     await _run_roast(message, chain, context, status_message=status)
     _chat_mode_chains[chat_id] = chain
     context.application.create_task(_update_profile_points(user_text, message))
+    context.application.create_task(_update_chronology(user_text, message))
 
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1439,6 +1510,7 @@ async def _create_preview(
         state_store.mark_message_drafted(message_key, entry_id)
     if source_text and source_text.strip():
         context.application.create_task(_update_profile_points(source_text, preview_msg))
+        context.application.create_task(_update_chronology(source_text, preview_msg))
 
 
 def _callback_payload(update: Update) -> tuple[str, str] | tuple[None, None]:

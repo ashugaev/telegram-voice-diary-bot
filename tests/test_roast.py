@@ -11,6 +11,7 @@ os.environ.setdefault("NOTION_DATABASE_ID", "test-notion-db")
 os.environ.setdefault("ALLOWED_USER_ID", "1")
 
 from services import memory, roast
+from services.diary_dates import diary_today
 
 
 def _chat_response(text, finish_reason="stop"):
@@ -67,7 +68,8 @@ class RoastServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(kwargs["messages"][0]["role"], "system")
         self.assertEqual(
             kwargs["messages"][0]["content"],
-            f"{roast.DEFAULT_SYSTEM_PROMPT}\n\n{roast.RULES_PROTOCOL_PROMPT}",
+            f"{roast.DEFAULT_SYSTEM_PROMPT}\n\nСегодня: {diary_today().isoformat()}"
+            f"\n\n{roast.RULES_PROTOCOL_PROMPT}",
         )
         self.assertEqual(kwargs["messages"][1:], chain)
 
@@ -160,6 +162,48 @@ class RoastServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("[2] меньше мата", system)
         # Rules outrank the persona and the profile, so they come after both.
         self.assertGreater(system.index(roast.RULES_HEADER), system.index("- likes hiking"))
+
+    async def test_roast_injects_chronology_into_system_prompt(self):
+        fake = FakeOpenAI(_chat_response("ok"))
+
+        with patch.object(roast.settings, "openai_api_key", "key"), \
+                patch.object(roast.settings, "roast_language", ""), \
+                patch.object(roast, "client", fake):
+            await roast.roast(
+                [{"role": "user", "content": "x"}],
+                chronology=_items("2026-09-15 — переехал в Лиссабон"),
+            )
+
+        system = fake.chat.completions.calls[0]["messages"][0]["content"]
+        self.assertIn(roast.CHRONOLOGY_HEADER, system)
+        self.assertIn("[1] 2026-09-15 — переехал в Лиссабон", system)
+
+    async def test_roast_always_carries_todays_date(self):
+        # Even with empty memory: the model cannot place the timeline without it.
+        fake = FakeOpenAI(_chat_response("ok"))
+
+        with patch.object(roast.settings, "openai_api_key", "key"), \
+                patch.object(roast, "client", fake):
+            await roast.roast([{"role": "user", "content": "x"}])
+
+        system = fake.chat.completions.calls[0]["messages"][0]["content"]
+        self.assertIn(f"Сегодня: {diary_today().isoformat()}", system)
+        self.assertNotIn(roast.CHRONOLOGY_HEADER, system)
+
+    async def test_roast_keeps_rules_below_the_chronology(self):
+        fake = FakeOpenAI(_chat_response("ok"))
+
+        with patch.object(roast.settings, "openai_api_key", "key"), \
+                patch.object(roast.settings, "roast_language", ""), \
+                patch.object(roast, "client", fake):
+            await roast.roast(
+                [{"role": "user", "content": "x"}],
+                rules=_items("не задавай вопросов"),
+                chronology=_items("2026-09-15 — переехал в Лиссабон"),
+            )
+
+        system = fake.chat.completions.calls[0]["messages"][0]["content"]
+        self.assertGreater(system.index(roast.RULES_HEADER), system.index(roast.CHRONOLOGY_HEADER))
 
     async def test_roast_always_carries_the_rules_protocol(self):
         # With an empty list too — that is how the first rule ever gets recorded.
@@ -344,6 +388,53 @@ class RoastServiceTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(roast.settings, "openai_api_key", "key"), \
                 patch.object(roast, "client", fake):
             self.assertEqual(await roast.extract_profile_points("entry", existing), existing)
+
+
+class ChronologyExtractionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_extract_chronology_events_applies_ops_and_shows_ids_to_the_model(self):
+        raw = _ops(
+            {"action": "create", "text": "  2026-09-15 — переехал   в Лиссабон "},
+            {"action": "delete", "id": "1"},
+        )
+        fake = FakeOpenAI(_chat_response(raw))
+
+        with patch.object(roast.settings, "openai_api_key", "key"), \
+                patch.object(roast, "client", fake):
+            events = await roast.extract_chronology_events(
+                "entry text", _items("2026-01-01 — начал проект")
+            )
+
+        self.assertEqual(memory.texts(events), ["2026-09-15 — переехал в Лиссабон"])
+        kwargs = fake.chat.completions.calls[0]
+        self.assertEqual(kwargs["model"], roast.settings.openai_profile_model)
+        self.assertEqual(kwargs["max_completion_tokens"], roast.PROFILE_MAX_COMPLETION_TOKENS)
+        self.assertEqual(kwargs["reasoning_effort"], roast.PROFILE_REASONING_EFFORT)
+        self.assertEqual(kwargs["response_format"], {"type": "json_object"})
+        self.assertEqual(kwargs["messages"][0]["content"], roast.CHRONOLOGY_EXTRACTION_PROMPT)
+        self.assertIn('"id": "1"', kwargs["messages"][1]["content"])
+        self.assertIn("2026-01-01 — начал проект", kwargs["messages"][1]["content"])
+
+    async def test_extract_chronology_events_passes_today_to_the_model(self):
+        fake = FakeOpenAI(_chat_response(_ops()))
+
+        with patch.object(roast.settings, "openai_api_key", "key"), \
+                patch.object(roast, "client", fake):
+            await roast.extract_chronology_events("entry", [])
+
+        payload = json.loads(fake.chat.completions.calls[0]["messages"][1]["content"])
+        self.assertEqual(payload["today"], diary_today().isoformat())
+
+    async def test_extract_chronology_events_keeps_existing_events_on_unusable_json(self):
+        existing = _items("2026-01-01 — начал проект")
+
+        for text, finish_reason in (("", "length"), ('{"ops": [{"action": "cre', "length")):
+            with self.subTest(text=text):
+                fake = FakeOpenAI(_chat_response(text, finish_reason=finish_reason))
+                with patch.object(roast.settings, "openai_api_key", "key"), \
+                        patch.object(roast, "client", fake):
+                    events = await roast.extract_chronology_events("entry", existing)
+
+                self.assertEqual(events, existing)
 
 
 class RulesBlockTests(unittest.TestCase):

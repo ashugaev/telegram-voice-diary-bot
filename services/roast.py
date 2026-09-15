@@ -5,6 +5,7 @@ from typing import NamedTuple
 from config import settings
 from services import memory
 from services.ai import create_chat_client
+from services.diary_dates import diary_today
 from services.memory import MemoryItem
 
 logger = logging.getLogger(__name__)
@@ -37,6 +38,11 @@ PROFILE_REASONING_EFFORT = "low"
 # Soft guidance passed to the model only — never enforced mechanically.
 MAX_PROFILE_POINTS = 400
 MAX_PROFILE_POINT_LENGTH = 200
+
+# Soft guidance passed to the model only — never enforced mechanically.
+MAX_CHRONOLOGY_EVENTS = 400
+MAX_CHRONOLOGY_EVENT_LENGTH = 160
+MAX_CHRONOLOGY_OPS_PER_NOTE = 20
 
 PROFILE_EXTRACTION_PROMPT = f"""Ты ведёшь профиль автора дневника — накопительную базу знаний о том, кто он, чтобы лучше его понимать и точнее направлять.
 Профиль КОПИТСЯ. Он обновляется после КАЖДОЙ записи и со временем должен становиться больше и подробнее. Потерять уже известный факт — самая дорогая ошибка, дороже, чем не добавить новый.
@@ -78,6 +84,35 @@ id бери ДОСЛОВНО из known_facts. Неизвестный id — о�
 Запись не даёт ничего устойчиво нового — верни {{"ops": []}}. Это нормальный и частый ответ.
 Фактов стало заметно больше {MAX_PROFILE_POINTS} — сворачивай близкие через modify, а не выкидывай через delete."""
 
+CHRONOLOGY_EXTRACTION_PROMPT = f"""Ты ведёшь хронологию автора дневника — ленту датированных событий его жизни, чтобы понимать, что и когда с ним произошло.
+Хронология КОПИТСЯ. Она обновляется после КАЖДОЙ записи. Потерять уже записанное событие — самая дорогая ошибка.
+На вход дают новую запись из дневника, уже известные события (каждое со своим id) и сегодняшнюю дату в поле "today".
+
+Сохраняй ТОЛЬКО значимые события, которым место на линии жизни: переезды, поездки, смена работы или проекта, старт и финал проектов, отношения — начало, разрыв, важные вехи, здоровье и травмы, крупные решения и покупки, важные встречи.
+НЕ сохраняй настроение, еду, самочувствие одного дня, обычный пересказ дня, планы без действия.
+
+Правила:
+- Каждое событие начинается с даты в формате YYYY-MM-DD, потом " — " и что произошло. Пример: "2026-09-15 — переехал в Лиссабон".
+- Запись не называет дату — бери "today". Называет дату явно или относительно ("вчера", "в марте") — считай её от "today" и ставь её.
+- Одно событие — одно короткое предложение, ориентировочно до {MAX_CHRONOLOGY_EVENT_LENGTH} символов.
+- Дедуп по смыслу: то же событие второй раз не добавляй. Появились подробности — правь существующее событие.
+- Пока событий меньше {MAX_CHRONOLOGY_EVENTS}, лента просто растёт. Ничего не выкидывай ради краткости.
+- За один проход не больше {MAX_CHRONOLOGY_OPS_PER_NOTE} операций.
+- Пиши на русском.
+
+УДАЛЯТЬ событие можно ТОЛЬКО в двух случаях:
+1) оно оказалось неправдой или не произошло;
+2) оно дубль другого события, и ты сворачиваешь их в одно.
+Других причин нет. Не чисти ленту от старых или мелких на твой взгляд событий.
+
+Ты возвращаешь ТОЛЬКО ОПЕРАЦИИ над отдельными событиями, никогда не ленту целиком. События, которых ты не тронул, сохраняются сами — НЕ перечисляй их.
+Верни СТРОГО JSON вида {{"ops": [...]}} без пояснений. Каждая операция — один объект:
+- {{"action": "create", "text": "YYYY-MM-DD — что произошло"}} — новое событие.
+- {{"action": "modify", "id": "<id из known_events>", "text": "новая версия"}} — уточнить дату или формулировку.
+- {{"action": "delete", "id": "<id из known_events>"}} — только по двум причинам выше.
+id бери ДОСЛОВНО из known_events. Неизвестный id — операция пропадёт, поэтому не выдумывай их.
+Запись не описывает событий для ленты — верни {{"ops": []}}. Это нормальный и частый ответ."""
+
 # Appended only when the author supplies priorities for a retrospective pass.
 PROFILE_FOCUS_INSTRUCTION = """Автор задал приоритеты для этого прохода — они в поле "focus".
 Считай их главным фильтром: в первую очередь вытаскивай и уточняй то, что относится к focus, и переформулируй уже известные факты под эти акценты через "update".
@@ -111,6 +146,8 @@ DEFAULT_SYSTEM_PROMPT = """Ты — чёткий пацан, братан авт
 
 Если чел отвечает на твоё сообщение — продолжаешь разговор, держа в голове весь предыдущий тред."""
 
+CHRONOLOGY_HEADER = """Хронология автора — что и когда с ним происходило (фон, не пересказывай это в лоб):"""
+
 RULES_HEADER = """Правила поведения, которые задал сам автор. Они ГЛАВНЕЕ всего написанного выше: при конфликте с персоной выигрывают они."""
 
 # Always appended, even with an empty rules list — this is how the first rule
@@ -142,6 +179,7 @@ def is_configured() -> bool:
 def system_prompt(
     points: list[MemoryItem] | None = None,
     rules: list[MemoryItem] | None = None,
+    chronology: list[MemoryItem] | None = None,
 ) -> str:
     base = settings.roast_system_prompt or DEFAULT_SYSTEM_PROMPT
     language = (settings.roast_language or "").strip()
@@ -152,6 +190,11 @@ def system_prompt(
         base = (
             f"{base}\n\nЧто ты уже знаешь об авторе (фон для понимания, не пересказывай это в лоб):\n{joined}"
         )
+    # The date is always there: without it the model cannot place the timeline
+    # against today.
+    base = f"{base}\n\nСегодня: {diary_today().isoformat()}"
+    if chronology:
+        base = f"{base}\n\n{CHRONOLOGY_HEADER}\n{memory.render(chronology)}"
     # Last, so the rules read as the final word over everything above them. Rules
     # carry their ids: the model edits this list from inside its own reply.
     if rules:
@@ -210,6 +253,7 @@ async def roast(
     messages: list[dict],
     points: list[MemoryItem] | None = None,
     rules: list[MemoryItem] | None = None,
+    chronology: list[MemoryItem] | None = None,
 ) -> RoastReply:
     if not is_configured():
         raise RuntimeError("AI provider API key is not configured")
@@ -219,13 +263,40 @@ async def roast(
         max_completion_tokens=ROAST_MAX_COMPLETION_TOKENS,
         reasoning_effort=ROAST_REASONING_EFFORT,
         messages=(
-            [{"role": "system", "content": system_prompt(points, rules)}] + _trim_chain(messages)
+            [{"role": "system", "content": system_prompt(points, rules, chronology)}]
+            + _trim_chain(messages)
         ),
     )
     reply = split_rules_update(_extract_text(response))
     if not reply.text:
         raise RuntimeError("AI provider returned an empty response")
     return reply
+
+
+def _merge_extraction(
+    response,
+    existing: list[MemoryItem],
+    store: str,
+) -> list[MemoryItem]:
+    """Fold the operations an extraction answered with into the stored list.
+
+    A completion that ran out of budget comes back either empty or as partial
+    JSON. Both are accumulated knowledge, so both degrade to a no-op: keeping
+    what we already know beats failing the caller or losing the list."""
+    text = _extract_text(response)
+    if text:
+        try:
+            block = json.loads(text)
+        except json.JSONDecodeError:
+            block = None
+        if isinstance(block, dict):
+            return memory.apply_ops(existing, block.get("ops"))
+    logger.warning(
+        "%s extraction returned no usable JSON (finish_reason=%s); keeping the existing list",
+        store,
+        _finish_reason(response),
+    )
+    return existing
 
 
 async def extract_profile_points(
@@ -264,22 +335,42 @@ async def extract_profile_points(
             {"role": "user", "content": payload},
         ],
     )
-    # A completion that ran out of budget comes back either empty or as partial
-    # JSON. The profile is accumulated knowledge, so both degrade to a no-op:
-    # keeping what we already know beats failing the caller or losing the list.
-    text = _extract_text(response)
-    if text:
-        try:
-            block = json.loads(text)
-        except json.JSONDecodeError:
-            block = None
-        if isinstance(block, dict):
-            return memory.apply_ops(existing, block.get("ops"))
-    logger.warning(
-        "Profile extraction returned no usable JSON (finish_reason=%s); keeping the existing profile",
-        _finish_reason(response),
+    return _merge_extraction(response, existing, "Profile")
+
+
+async def extract_chronology_events(
+    diary_text: str,
+    existing_events: list[MemoryItem] | None = None,
+) -> list[MemoryItem]:
+    """Fold one diary entry into the dated chronology. Returns the new list.
+
+    Same operation protocol as the profile: the model answers with per-event
+    create/modify/delete against the ids it was shown, so the timeline grows
+    without the completion growing with it. Today's date rides along, because an
+    entry rarely dates itself."""
+    if not is_configured():
+        raise RuntimeError("AI provider API key is not configured")
+
+    existing = list(existing_events or [])
+    payload = json.dumps(
+        {
+            "diary_entry": diary_text,
+            "known_events": memory.dump(existing),
+            "today": diary_today().isoformat(),
+        },
+        ensure_ascii=False,
     )
-    return existing
+    response = await client.chat.completions.create(
+        model=settings.profile_model,
+        max_completion_tokens=PROFILE_MAX_COMPLETION_TOKENS,
+        reasoning_effort=PROFILE_REASONING_EFFORT,
+        response_format={"type": "json_object"},
+        messages=[
+            {"role": "system", "content": CHRONOLOGY_EXTRACTION_PROMPT},
+            {"role": "user", "content": payload},
+        ],
+    )
+    return _merge_extraction(response, existing, "Chronology")
 
 
 SUMMARIZE_SYSTEM_PROMPT = """Ты кратко и емко суммаризируешь предыдущую часть переписки между пользователем и его братаном/коучем (roast bot).

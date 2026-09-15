@@ -73,12 +73,24 @@ What an entry taught is reported the same way as a rule change: a `🧠 Memory u
 
 The profile also lives on a **`Memory — Author profile`** page sitting next to your diary database, so you can read what the bot knows in the same place as your notes — and correct it: edit the bullets and the bot adopts your version, same as with the rules page — see [Configuration](configuration.md#memory-pages).
 
+### Chronology
+
+Beside the profile, the bot keeps a **chronology** — a dated timeline of what happened to you, refreshed from **every message** the same way (best-effort, in the background). Each line starts with a `YYYY-MM-DD` date: `2026-09-15 — moved to Lisbon`. A note that names no date is dated today; a note that says "yesterday" or "in March" is dated from that.
+
+Only events worth a timeline are stored — trips, moves, job and relationship and health milestones, project starts and ends, big decisions. Moods, meals, and ordinary day recaps are not. An event is removed only when it turned out false or folds into a duplicate.
+
+The timeline is injected into **every** roast and chat request, together with today's date, so the bot can reason about how long ago something was. Changes come as their own `🧠 Memory updated` note with a `Chronology:` block — the timeline is extracted separately from the profile, so an entry that moves both sends two notes.
+
+It lives on a **`Memory — Chronology`** page next to your diary database and syncs both ways like the other two — see [Configuration](configuration.md#memory-pages).
+
 ### Rebuilding the profile retrospectively — `/memory`
 
 `/memory` walks your whole diary history and rebuilds the profile from it, in two steps:
 
 1. **Focus** — the bot asks what should drive this pass (what matters most, what to keep, what to drop). Reply with text or a voice message; send `-` to rebuild without extra focus. The reply is only ever read as focus, never saved as a diary note.
 2. **Confirm** — the bot echoes the focus and the current fact count, then waits for **✓ Confirm** or **✗ Cancel**. Nothing runs until you confirm.
+
+`/memory` rebuilds the profile only — the chronology is built from new entries as they arrive.
 
 On confirm the bot walks every Notion note **oldest-first, one at a time** — one AI request per note, each fed the profile accumulated so far, exactly like the per-message refresh. Existing facts seed the pass and get corrected as it goes; an empty profile is built from scratch. Focus steers what gets pulled out and how known facts are reframed, and is never stored as a fact itself.
 

@@ -319,17 +319,20 @@ class EnsureMemoryPagesTests(unittest.IsolatedAsyncioTestCase):
         finally:
             notion_memory.httpx.AsyncClient = original
 
-    async def test_both_pages_are_created_when_missing(self):
+    async def test_every_page_is_created_when_missing(self):
         http = FakeNotionHttp(children={PARENT_PAGE_ID: []})
 
         page_ids = await self._ensure(http)
 
-        self.assertEqual(page_ids, ["created-page", "created-page"])
+        self.assertEqual(page_ids, ["created-page", "created-page", "created-page"])
         titles = [
             call["json"]["properties"]["title"]["title"][0]["text"]["content"]
             for call in http.post_calls
         ]
-        self.assertEqual(titles, ["Memory — Author profile", "Memory — Bot rules"])
+        self.assertEqual(
+            titles,
+            ["Memory — Author profile", "Memory — Bot rules", "Memory — Chronology"],
+        )
         # Seeded with a header so a page never looks broken before its first sync.
         labels = [
             call["json"]["children"][0]["paragraph"]["rich_text"][0]["text"]["content"]
@@ -337,16 +340,18 @@ class EnsureMemoryPagesTests(unittest.IsolatedAsyncioTestCase):
         ]
         self.assertTrue(labels[0].endswith("· 0 facts"))
         self.assertTrue(labels[1].endswith("· 0 rules"))
+        self.assertTrue(labels[2].endswith("· 0 events"))
 
     async def test_existing_pages_are_reused_and_their_content_untouched(self):
         http = FakeNotionHttp(children={
             PARENT_PAGE_ID: [
                 _child_page("author-1", notion_memory.AUTHOR_MEMORY_PAGE_TITLE),
                 _child_page("bot-1", notion_memory.BOT_MEMORY_PAGE_TITLE),
+                _child_page("chronology-1", notion_memory.CHRONOLOGY_MEMORY_PAGE_TITLE),
             ],
         })
 
-        self.assertEqual(await self._ensure(http), ["author-1", "bot-1"])
+        self.assertEqual(await self._ensure(http), ["author-1", "bot-1", "chronology-1"])
         self.assertEqual(http.post_calls, [])
         self.assertEqual(http.patch_calls, [])
         self.assertEqual(http.delete_calls, [])
