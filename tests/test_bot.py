@@ -1041,7 +1041,10 @@ class MainRegistrationTests(unittest.TestCase):
             for handler in command_handlers
         }
 
-        self.assertEqual(set(command_filters), {"start", "help", "weekly", "stat", "memory", "rules"})
+        self.assertEqual(
+            set(command_filters),
+            {"start", "help", "diary", "chat", "weekly", "stat", "memory", "rules"},
+        )
         self.assertEqual(set(command_filters), {name for name, _ in bot.COMMANDS})
         for command, command_filter in command_filters.items():
             with self.subTest(command=command):
@@ -1271,6 +1274,12 @@ class FakeStateStore:
 
     def remove_draft(self, entry_id):
         self.removed_drafts.append(entry_id)
+
+    def get_mode(self, chat_id):
+        return bot.MODE_DIARY
+
+    def set_mode(self, chat_id, mode):
+        pass
 
 
 class FakeRoastBot:
@@ -2383,3 +2392,127 @@ class MemorySyncTests(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertEqual(peak, 1)
+
+
+class ModeSwitchTests(unittest.IsolatedAsyncioTestCase):
+    async def test_start_and_help_include_main_keyboard(self):
+        replies = []
+
+        class Message:
+            chat_id = 42
+            message_id = 1
+
+            async def reply_text(self, text, **kwargs):
+                replies.append((text, kwargs))
+
+        update = SimpleNamespace(effective_message=Message(), args=[])
+        context = SimpleNamespace(bot=SimpleNamespace())
+
+        await bot.handle_start(update, context)
+        self.assertIn("reply_markup", replies[-1][1])
+        self.assertIsInstance(replies[-1][1]["reply_markup"], bot.ReplyKeyboardMarkup)
+
+        await bot.handle_help(update, context)
+        self.assertIn("reply_markup", replies[-1][1])
+        self.assertIsInstance(replies[-1][1]["reply_markup"], bot.ReplyKeyboardMarkup)
+
+    async def test_mode_switch_commands_and_buttons(self):
+        replies = []
+
+        class Message:
+            chat_id = 42
+            message_id = 1
+            text = ""
+
+            async def reply_text(self, text, **kwargs):
+                replies.append((text, kwargs))
+
+        msg = Message()
+        update = SimpleNamespace(effective_message=msg, effective_chat=SimpleNamespace(id=42))
+        context = SimpleNamespace(bot=SimpleNamespace())
+
+        with patch.object(bot.state_store, "set_mode") as mock_set_mode:
+            await bot.handle_chat_mode(update, context)
+            mock_set_mode.assert_called_with(42, "chat")
+            self.assertIn("Chat mode active", replies[-1][0])
+
+            await bot.handle_diary_mode(update, context)
+            mock_set_mode.assert_called_with(42, "diary")
+            self.assertIn("Diary mode active", replies[-1][0])
+
+        with patch.object(bot, "handle_chat_mode", new=AsyncMock()) as mock_chat, \
+                patch.object(bot, "handle_diary_mode", new=AsyncMock()) as mock_diary:
+            for text in ["🔥 Chat", "chat", "пиздеж", "🔥 пиздёж", "/chat", "🔥 Roast"]:
+                msg.text = text
+                await bot.handle_text(update, context)
+            self.assertEqual(mock_chat.await_count, 6)
+
+            for text in ["📖 Diary", "diary", "дневник", "📖 дневник", "/diary"]:
+                msg.text = text
+                await bot.handle_text(update, context)
+            self.assertEqual(mock_diary.await_count, 5)
+
+
+class ChatModeFlowTests(unittest.IsolatedAsyncioTestCase):
+    async def test_chat_mode_text_triggers_roast_without_draft_or_notion(self):
+        created_tasks = []
+        fake_bot = FakeRoastBot()
+
+        class Message:
+            chat_id = 42
+            message_id = 1
+            text = "my thoughts today"
+
+            def get_bot(self):
+                return fake_bot
+
+        msg = Message()
+        update = SimpleNamespace(effective_message=msg, effective_chat=SimpleNamespace(id=42))
+        context = SimpleNamespace(
+            bot=fake_bot,
+            application=SimpleNamespace(create_task=lambda task, **kwargs: created_tasks.append(task)),
+        )
+
+        with patch.object(bot.state_store, "get_mode", return_value="chat"), \
+                patch.object(bot.state_store, "record_text") as mock_record, \
+                patch.object(bot, "_run_roast", new=AsyncMock()) as mock_roast, \
+                patch.object(bot, "_update_profile_points", new=AsyncMock()) as mock_profile:
+            await bot.handle_text(update, context)
+
+            mock_record.assert_not_called()
+            mock_roast.assert_awaited_once()
+            args = mock_roast.await_args[0]
+            self.assertEqual(args[1], [{"role": "user", "content": "my thoughts today"}])
+            self.assertEqual(len(created_tasks), 1)
+
+    async def test_chat_mode_voice_transcribes_and_roasts_without_draft(self):
+        created_tasks = []
+        fake_bot = FakeRoastBot()
+
+        class Message:
+            chat_id = 42
+            message_id = 1
+            voice = SimpleNamespace(file_id="voice-id")
+
+            def get_bot(self):
+                return fake_bot
+
+        msg = Message()
+        update = SimpleNamespace(effective_message=msg, effective_chat=SimpleNamespace(id=42))
+        context = SimpleNamespace(
+            bot=fake_bot,
+            application=SimpleNamespace(create_task=lambda task, **kwargs: created_tasks.append(task)),
+        )
+
+        with patch.object(bot.state_store, "get_mode", return_value="chat"), \
+                patch.object(bot.state_store, "record_voice") as mock_record, \
+                patch.object(bot, "_transcribe_voice_file", new=AsyncMock(return_value="spoken thoughts")), \
+                patch.object(bot, "_run_roast", new=AsyncMock()) as mock_roast:
+            await bot.handle_voice(update, context)
+
+            mock_record.assert_not_called()
+            mock_roast.assert_awaited_once()
+            args = mock_roast.await_args[0]
+            self.assertEqual(args[1], [{"role": "user", "content": "spoken thoughts"}])
+            self.assertEqual(len(created_tasks), 1)
+

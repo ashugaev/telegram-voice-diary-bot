@@ -192,3 +192,18 @@ class StateStoreTests(unittest.TestCase):
 
             self.assertEqual([message["key"] for message in store.recent_unprocessed_messages(limit=10)], [key])
             self.assertTrue(store.get_message(key)["allow_duplicate"])
+
+    def test_mode_defaults_to_diary_and_persists(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "state.json"
+            store = StateStore(path)
+            self.assertEqual(store.get_mode(123), "diary")
+
+            store.set_mode(123, "chat")
+            self.assertEqual(store.get_mode(123), "chat")
+            self.assertEqual(StateStore(path).get_mode(123), "chat")
+
+            store.set_mode(123, "diary")
+            self.assertEqual(store.get_mode(123), "diary")
+            self.assertEqual(StateStore(path).get_mode(123), "diary")
+
