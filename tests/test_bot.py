@@ -2434,29 +2434,32 @@ class ModeSwitchTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(bot.state_store, "set_mode") as mock_set_mode:
             await bot.handle_chat_mode(update, context)
             mock_set_mode.assert_called_with(42, "chat")
-            self.assertIn("Chat mode active", replies[-1][0])
+            self.assertIn("Режим пиздежа", replies[-1][0])
+            self.assertEqual(replies[-1][1]["reply_markup"].keyboard[0][0].text, bot.KEYBOARD_TO_DIARY_BUTTON)
 
             await bot.handle_diary_mode(update, context)
             mock_set_mode.assert_called_with(42, "diary")
-            self.assertIn("Diary mode active", replies[-1][0])
+            self.assertIn("Режим дневника", replies[-1][0])
+            self.assertEqual(replies[-1][1]["reply_markup"].keyboard[0][0].text, bot.KEYBOARD_TO_CHAT_BUTTON)
 
         with patch.object(bot, "handle_chat_mode", new=AsyncMock()) as mock_chat, \
                 patch.object(bot, "handle_diary_mode", new=AsyncMock()) as mock_diary:
-            for text in ["🔥 Chat", "chat", "пиздеж", "🔥 пиздёж", "/chat", "🔥 Roast"]:
+            for text in ["🔥 Chat", "chat", "пиздеж", "🔥 пиздёж", "/chat", "🔥 Roast", "🔥 Включить пиздеж"]:
                 msg.text = text
                 await bot.handle_text(update, context)
-            self.assertEqual(mock_chat.await_count, 6)
+            self.assertEqual(mock_chat.await_count, 7)
 
-            for text in ["📖 Diary", "diary", "дневник", "📖 дневник", "/diary"]:
+            for text in ["📖 Diary", "diary", "дневник", "📖 дневник", "/diary", "📖 Включить дневник"]:
                 msg.text = text
                 await bot.handle_text(update, context)
-            self.assertEqual(mock_diary.await_count, 5)
+            self.assertEqual(mock_diary.await_count, 6)
 
 
 class ChatModeFlowTests(unittest.IsolatedAsyncioTestCase):
     async def test_chat_mode_text_triggers_roast_without_draft_or_notion(self):
         created_tasks = []
         fake_bot = FakeRoastBot()
+        bot._chat_mode_chains.clear()
 
         class Message:
             chat_id = 42
@@ -2488,6 +2491,7 @@ class ChatModeFlowTests(unittest.IsolatedAsyncioTestCase):
     async def test_chat_mode_voice_transcribes_and_roasts_without_draft(self):
         created_tasks = []
         fake_bot = FakeRoastBot()
+        bot._chat_mode_chains.clear()
 
         class Message:
             chat_id = 42
@@ -2515,4 +2519,45 @@ class ChatModeFlowTests(unittest.IsolatedAsyncioTestCase):
             args = mock_roast.await_args[0]
             self.assertEqual(args[1], [{"role": "user", "content": "spoken thoughts"}])
             self.assertEqual(len(created_tasks), 1)
+
+    async def test_chat_mode_accumulates_history_and_summarizes_at_limit(self):
+        fake_bot = FakeRoastBot()
+
+        class Message:
+            chat_id = 100
+            message_id = 1
+            text = "message"
+
+            def get_bot(self):
+                return fake_bot
+
+        msg = Message()
+        update = SimpleNamespace(effective_message=msg, effective_chat=SimpleNamespace(id=100))
+        context = SimpleNamespace(
+            bot=fake_bot,
+            application=SimpleNamespace(create_task=lambda task, **kwargs: None),
+        )
+
+        bot._chat_mode_chains.clear()
+
+        # Fill 29 turns
+        bot._chat_mode_chains[100] = [
+            {"role": "user" if i % 2 == 0 else "assistant", "content": f"msg {i}"}
+            for i in range(29)
+        ]
+
+        with patch.object(bot.state_store, "get_mode", return_value="chat"), \
+                patch.object(bot.roast, "summarize_conversation", new=AsyncMock(return_value="Recap of dialogue")) as mock_sum, \
+                patch.object(bot, "_run_roast", new=AsyncMock()) as mock_roast:
+            msg.text = "message 30"
+            await bot.handle_text(update, context)
+
+            mock_sum.assert_awaited_once()
+            chain_passed = mock_roast.await_args[0][1]
+            self.assertEqual(chain_passed[0]["role"], "system")
+            self.assertIn("Recap of dialogue", chain_passed[0]["content"])
+            # Recap + 10 retained tail messages
+            self.assertEqual(len(chain_passed), 11)
+            self.assertEqual(chain_passed[-1]["content"], "message 30")
+
 
