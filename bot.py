@@ -13,7 +13,16 @@ from time import monotonic
 from types import SimpleNamespace
 from typing import Any
 
-from telegram import BotCommand, ForceReply, ReplyParameters, Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import (
+    BotCommand,
+    ForceReply,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+    ReplyParameters,
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+)
 from telegram.ext import (
     Application,
     ApplicationBuilder,
@@ -30,7 +39,7 @@ from services import memory, notion_memory, profile_rebuild, roast
 from services.diary_dates import diary_today
 from services.formatter import format_entry
 from services.notion import save_entry
-from services.state_store import PROFILE_SECTION, RULES_SECTION, state_store
+from services.state_store import MODE_CHAT, MODE_DIARY, PROFILE_SECTION, RULES_SECTION, state_store
 from services.stats import build_audio_stats, format_audio_stats
 from services.summary import generate_daily_summary, generate_weekly_report
 from services.whisper import transcribe
@@ -81,6 +90,40 @@ _last_memory_pull: float | None = None
 # Intentionally not persisted: chains are discarded on restart.
 _roast_chains: dict[str, list[dict]] = {}
 
+KEYBOARD_DIARY_BUTTON = "📖 Diary"
+KEYBOARD_CHAT_BUTTON = "🔥 Chat"
+DIARY_MODE_TOKENS = {
+    "📖 diary",
+    "diary",
+    "/diary",
+    "дневник",
+    "📖 дневник",
+    "режим дневник",
+    "режим дневника",
+}
+CHAT_MODE_TOKENS = {
+    "🔥 chat",
+    "chat",
+    "/chat",
+    "пиздеж",
+    "пиздёж",
+    "🔥 пиздеж",
+    "🔥 пиздёж",
+    "режим пиздеж",
+    "режим пиздёж",
+    "🔥 roast",
+    "roast",
+    "/roast",
+}
+
+
+def _main_reply_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        [[KeyboardButton(KEYBOARD_DIARY_BUTTON), KeyboardButton(KEYBOARD_CHAT_BUTTON)]],
+        resize_keyboard=True,
+        is_persistent=True,
+    )
+
 
 @dataclass(frozen=True)
 class PreviewRender:
@@ -94,6 +137,8 @@ class PreviewRender:
 COMMANDS: tuple[tuple[str, str], ...] = (
     ("start", "What I do"),
     ("help", "Commands and buttons"),
+    ("diary", "Switch to Diary mode"),
+    ("chat", "Switch to Chat mode (roast prompt)"),
     ("weekly", "Weekly report now"),
     ("stat", "Saved audio minutes"),
     ("memory", "Rebuild author profile from all notes"),
@@ -961,7 +1006,10 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await _send_source_jump(update, context, *source)
         return
 
-    await update.effective_message.reply_text(WELCOME_TEXT)
+    await update.effective_message.reply_text(
+        WELCOME_TEXT,
+        reply_markup=_main_reply_keyboard(),
+    )
 
 
 async def _send_source_jump(
@@ -987,7 +1035,29 @@ async def _send_source_jump(
 
 
 async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.effective_message.reply_text(HELP_TEXT, parse_mode="Markdown")
+    await update.effective_message.reply_text(
+        HELP_TEXT,
+        parse_mode="Markdown",
+        reply_markup=_main_reply_keyboard(),
+    )
+
+
+async def handle_diary_mode(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = _message_chat_id(update.effective_message)
+    state_store.set_mode(chat_id, MODE_DIARY)
+    await update.effective_message.reply_text(
+        "📖 Diary mode active. Voice or text messages will be formatted and previewed for Notion.",
+        reply_markup=_main_reply_keyboard(),
+    )
+
+
+async def handle_chat_mode(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = _message_chat_id(update.effective_message)
+    state_store.set_mode(chat_id, MODE_CHAT)
+    await update.effective_message.reply_text(
+        "🔥 Chat mode active (пиздеж). Messages get instant roast replies and won't go to Notion. Memory updates as usual.",
+        reply_markup=_main_reply_keyboard(),
+    )
 
 
 async def handle_rules(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1035,6 +1105,11 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await _receive_memory_focus_voice(update, context)
         return
 
+    chat_id = _message_chat_id(message)
+    if state_store.get_mode(chat_id) == MODE_CHAT:
+        await _handle_chat_mode_voice(update, context)
+        return
+
     voice = message.voice
     file_unique_id = getattr(voice, "file_unique_id", None)
     duration = getattr(voice, "duration", None)
@@ -1070,8 +1145,71 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     )
 
 
+async def _handle_chat_mode_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    message = update.effective_message
+    user_text = (message.text or "").strip()
+    if not user_text:
+        return
+
+    if not roast.is_configured():
+        await message.reply_text("🔥 Chat is unavailable: set AI provider API key in .env.")
+        return
+
+    status = await _reply_to_source(message, "🔥 Thinking...")
+    chain = [{"role": "user", "content": user_text}]
+    await _run_roast(message, chain, context, status_message=status)
+    context.application.create_task(_update_profile_points(user_text, message))
+
+
+async def _handle_chat_mode_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    message = update.effective_message
+    if not roast.is_configured():
+        await message.reply_text("🔥 Chat is unavailable: set AI provider API key in .env.")
+        return
+
+    status = await _reply_to_source(message, "Transcribing...")
+    try:
+        user_text = await _transcribe_voice_file(context, message.voice.file_id)
+    except Exception as e:
+        logger.exception("Error transcribing chat voice message")
+        await _edit_reply_message(context, status, f"Error: {e}")
+        return
+
+    if not user_text:
+        await _edit_reply_message(
+            context,
+            status,
+            f"{settings.openai_transcription_model} did not recognize any speech in this message.",
+        )
+        return
+
+    logger.info(
+        "Chat voice transcription with %s: %s",
+        settings.openai_transcription_model,
+        user_text,
+    )
+    await _edit_reply_message(context, status, "🔥 Thinking...")
+    chain = [{"role": "user", "content": user_text}]
+    await _run_roast(message, chain, context, status_message=status)
+    context.application.create_task(_update_profile_points(user_text, message))
+
+
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.effective_message
+    raw_text = (message.text or "").strip()
+    normalized = raw_text.lower()
+    if normalized in DIARY_MODE_TOKENS:
+        await handle_diary_mode(update, context)
+        return
+    if normalized in CHAT_MODE_TOKENS:
+        await handle_chat_mode(update, context)
+        return
+
+    chat_id = _message_chat_id(message)
+    if state_store.get_mode(chat_id) == MODE_CHAT:
+        await _handle_chat_mode_text(update, context)
+        return
+
     message_key = state_store.record_text(
         chat_id=message.chat_id,
         message_id=message.message_id,
@@ -1865,6 +2003,8 @@ def main() -> None:
     command_handlers = [
         CommandHandler("start", handle_start, filters=user_filter),
         CommandHandler("help", handle_help, filters=user_filter),
+        CommandHandler("diary", handle_diary_mode, filters=user_filter),
+        CommandHandler("chat", handle_chat_mode, filters=user_filter),
         CommandHandler("weekly", handle_weekly, filters=user_filter),
         CommandHandler("stat", handle_stat, filters=user_filter),
         CommandHandler("memory", handle_memory, filters=user_filter),

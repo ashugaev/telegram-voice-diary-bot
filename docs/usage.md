@@ -36,6 +36,13 @@ Daily sport health
 
 Nothing is written to Notion until you press **Save**. If saving fails, the preview stays with the Save button so you can retry. If the bot recognizes an already-saved voice message, it warns you first and offers **Add anyway**.
 
+## Modes: Diary vs Chat (пиздеж)
+
+The bot has two persistent modes, switchable via the bottom keyboard buttons (`📖 Diary` / `🔥 Chat`) or commands (`/diary` / `/chat`):
+
+1. **📖 Diary (default)** — Voice or text messages are formatted, tagged, previewed, and saved to Notion upon clicking **Save**.
+2. **🔥 Chat (пиздеж)** — Direct conversation with the roast persona. Messages receive immediate roast responses and do NOT create Notion drafts or entries. Memory updates (author profile and behavior rules) continue working as usual.
+
 ## 🔥 Roast mode (разъёб)
 
 **🔥 Roast** sends the current draft to a high-reasoning model that plays a blunt-but-caring street-bro: honest, on your side, teasing where it helps, never sugar-coating. The take is posted as a new reply — your draft is never modified.

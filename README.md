@@ -30,6 +30,8 @@ You'll need a Telegram bot token, an OpenAI API key, and a Notion integration + 
 |---------|-------------|
 | `/start` | Welcome and quick overview |
 | `/help` | Commands and preview buttons |
+| `/diary` | Switch to Diary mode (default) |
+| `/chat` | Switch to Chat mode (roast prompt, no Notion save) |
 | `/weekly` | Generate the weekly report now |
 | `/stat` | Saved audio minutes overall, by day, and by month |
 | `/memory` | Rebuild the author profile from every saved note, guided by focus points you supply |

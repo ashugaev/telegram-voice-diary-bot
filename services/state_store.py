@@ -14,6 +14,8 @@ MAX_RETAINED_MESSAGES = 200
 # State sections mirrored to a Notion memory page.
 PROFILE_SECTION = "profile"
 RULES_SECTION = "rules"
+MODE_DIARY = "diary"
+MODE_CHAT = "chat"
 UNPROCESSED_STATUSES = {"received", "processing", "failed"}
 VOICE_DUPLICATE_STATUSES = {"drafted", "saved"}
 
@@ -33,6 +35,7 @@ class StateStore:
                 "version": 1,
                 "messages": {},
                 "drafts": {},
+                "modes": {},
                 "profile": {"points": [], "notion_mirror": []},
                 "rules": {"items": [], "notion_mirror": []},
             }
@@ -41,6 +44,7 @@ class StateStore:
         data.setdefault("version", 1)
         data.setdefault("messages", {})
         data.setdefault("drafts", {})
+        data.setdefault("modes", {})
         data.setdefault("profile", {})
         data["profile"].setdefault("points", [])
         data["profile"].setdefault("notion_mirror", [])
@@ -277,6 +281,18 @@ class StateStore:
     def get_draft(self, entry_id: str) -> dict[str, Any] | None:
         draft = self.data["drafts"].get(entry_id)
         return deepcopy(draft) if draft else None
+
+    def get_mode(self, chat_id: int) -> str:
+        modes = self.data.setdefault("modes", {})
+        return modes.get(str(chat_id), MODE_DIARY)
+
+    def set_mode(self, chat_id: int, mode: str) -> None:
+        modes = self.data.setdefault("modes", {})
+        target_mode = MODE_CHAT if mode == MODE_CHAT else MODE_DIARY
+        if modes.get(str(chat_id)) == target_mode:
+            return
+        modes[str(chat_id)] = target_mode
+        self._save()
 
     def remove_draft(self, entry_id: str) -> None:
         self.data["drafts"].pop(entry_id, None)
