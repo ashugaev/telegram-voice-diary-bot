@@ -2684,4 +2684,46 @@ class ChatModeFlowTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(chain_passed), 11)
             self.assertEqual(chain_passed[-1]["content"], "message 30")
 
+    async def test_chat_mode_processes_messages_sequentially(self):
+        fake_bot = FakeRoastBot()
+        execution_order = []
+
+        class Message:
+            def __init__(self, text):
+                self.chat_id = 200
+                self.message_id = len(execution_order) + 1
+                self.text = text
+
+            def get_bot(self):
+                return fake_bot
+
+        bot._chat_mode_chains.clear()
+        bot._chat_mode_locks.clear()
+
+        async def slow_roast(target, chain, context, status_message=None):
+            msg_text = chain[-1]["content"]
+            execution_order.append(f"start {msg_text}")
+            await asyncio.sleep(0.05)
+            execution_order.append(f"end {msg_text}")
+
+        context = SimpleNamespace(
+            bot=fake_bot,
+            application=SimpleNamespace(create_task=lambda task, **kwargs: None),
+        )
+
+        with patch.object(bot.state_store, "get_mode", return_value="chat"), \
+                patch.object(bot, "_run_roast", new=slow_roast):
+            task1 = asyncio.create_task(bot.handle_text(SimpleNamespace(effective_message=Message("first")), context))
+            task2 = asyncio.create_task(bot.handle_text(SimpleNamespace(effective_message=Message("second")), context))
+            await asyncio.gather(task1, task2)
+
+        self.assertEqual(
+            execution_order,
+            ["start first", "end first", "start second", "end second"],
+        )
+        self.assertEqual(len(bot._chat_mode_chains[200]), 2)
+        self.assertEqual(bot._chat_mode_chains[200][0]["content"], "first")
+        self.assertEqual(bot._chat_mode_chains[200][1]["content"], "second")
+
+
 

@@ -101,8 +101,17 @@ _roast_chains: dict[str, list[dict]] = {}
 # In-memory ongoing conversation chains for Chat mode, keyed by chat_id.
 # Reset whenever switching into Diary mode or back.
 _chat_mode_chains: dict[int, list[dict]] = {}
+_chat_mode_locks: dict[int, asyncio.Lock] = {}
 CHAT_MODE_MAX_MESSAGES = 30
 CHAT_MODE_RETAIN_MESSAGES = 10
+
+
+def _get_chat_mode_lock(chat_id: int) -> asyncio.Lock:
+    lock = _chat_mode_locks.get(chat_id)
+    if lock is None:
+        lock = asyncio.Lock()
+        _chat_mode_locks[chat_id] = lock
+    return lock
 
 KEYBOARD_TO_CHAT_BUTTON = "🔥 Включить пиздеж"
 KEYBOARD_TO_DIARY_BUTTON = "📖 Включить дневник"
@@ -1267,9 +1276,10 @@ async def _handle_chat_mode_text(update: Update, context: ContextTypes.DEFAULT_T
 
     chat_id = _message_chat_id(message)
     status = await _reply_to_source(message, "🔥 Thinking...")
-    chain = await _prepare_chat_chain(chat_id, user_text)
-    await _run_roast(message, chain, context, status_message=status)
-    _chat_mode_chains[chat_id] = chain
+    async with _get_chat_mode_lock(chat_id):
+        chain = await _prepare_chat_chain(chat_id, user_text)
+        await _run_roast(message, chain, context, status_message=status)
+        _chat_mode_chains[chat_id] = chain
     context.application.create_task(_update_profile_points(user_text, message))
     context.application.create_task(_update_chronology(user_text, message))
 
@@ -1301,11 +1311,12 @@ async def _handle_chat_mode_voice(update: Update, context: ContextTypes.DEFAULT_
         settings.openai_transcription_model,
         user_text,
     )
-    await _edit_reply_message(context, status, "🔥 Thinking...")
     chat_id = _message_chat_id(message)
-    chain = await _prepare_chat_chain(chat_id, user_text)
-    await _run_roast(message, chain, context, status_message=status)
-    _chat_mode_chains[chat_id] = chain
+    await _edit_reply_message(context, status, "🔥 Thinking...")
+    async with _get_chat_mode_lock(chat_id):
+        chain = await _prepare_chat_chain(chat_id, user_text)
+        await _run_roast(message, chain, context, status_message=status)
+        _chat_mode_chains[chat_id] = chain
     context.application.create_task(_update_profile_points(user_text, message))
     context.application.create_task(_update_chronology(user_text, message))
 
