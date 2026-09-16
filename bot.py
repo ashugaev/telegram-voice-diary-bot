@@ -833,35 +833,58 @@ async def _sync_memory() -> None:
         _last_memory_pull = monotonic()
 
 
-async def _update_profile_points(diary_text: str, reply_target=None) -> None:
-    """Best-effort: refresh the persisted author profile from a diary entry.
-    Never blocks or breaks the roast flow — failures are logged and swallowed.
+async def _update_memory_and_chronology(diary_text: str, reply_target=None) -> None:
+    """Best-effort: refresh the persisted author profile and dated chronology in one pass.
+    Never blocks or breaks user flow — failures are logged and swallowed.
 
-    `reply_target` is the message the note about the new facts replies to. An
-    entry that taught nothing sends nothing."""
+    `reply_target` is the message the note about the new facts and events replies to.
+    An entry that taught nothing sends nothing."""
     await _sync_author_memory()
-    existing = state_store.get_profile_points()
+    await _sync_chronology_memory()
+    existing_points = state_store.get_profile_points()
+    existing_events = state_store.get_chronology()
     try:
-        points = await roast.extract_profile_points(diary_text, existing)
+        extracted = await roast.extract_memory(
+            diary_text,
+            existing_points=existing_points,
+            existing_events=existing_events,
+        )
     except Exception:
-        logger.exception("Failed to update roast profile points")
+        logger.exception("Failed to update roast memory and chronology")
         return
+
+    new_points, new_events = extracted.points, extracted.events
     async with _memory_lock:
-        # Extraction is slow, and a hand edit adopted while it ran would be
-        # overwritten by a list merged from a stale read. Drop this pass instead
-        # — the next diary message extracts again.
-        if state_store.get_profile_points() != existing:
-            logger.info("Author profile moved while extracting; dropping this pass")
-            return
-        state_store.set_profile_points(points)
-        await _sync_author_memory_held()
+        profile_moved = state_store.get_profile_points() != existing_points
+        chronology_moved = state_store.get_chronology() != existing_events
+        if profile_moved:
+            logger.info("Author profile moved while extracting; dropping profile update")
+        else:
+            state_store.set_profile_points(new_points)
+            await _sync_author_memory_held()
+
+        if chronology_moved:
+            logger.info("Chronology moved while extracting; dropping chronology update")
+        else:
+            state_store.set_chronology(new_events)
+            await _sync_chronology_memory_held()
+
     if reply_target is None:
         return
-    # Outside the lock: a Telegram send must never hold memory.
+
+    profile_diff = [] if profile_moved else _memory_diff_lines(existing_points, new_points)
+    chronology_diff = [] if chronology_moved else _memory_diff_lines(existing_events, new_events)
+    if not profile_diff and not chronology_diff:
+        return
+
+    blocks = []
+    if profile_diff:
+        blocks.append((PROFILE_BLOCK_LABEL, profile_diff))
+    if chronology_diff:
+        blocks.append((CHRONOLOGY_BLOCK_LABEL, chronology_diff))
+
     try:
-        note, sent = await _send_memory_note(
-            reply_target, (PROFILE_BLOCK_LABEL, _memory_diff_lines(existing, points))
-        )
+        note, sent = await _send_memory_note(reply_target, *blocks)
         if sent:
             chain = [
                 {"role": "user", "content": diary_text},
@@ -870,44 +893,17 @@ async def _update_profile_points(diary_text: str, reply_target=None) -> None:
             for message in sent:
                 _store_roast_chain(_message_chat_id(message), message.message_id, chain)
     except Exception:
-        logger.exception("Failed to post the profile update note")
+        logger.exception("Failed to post the memory update note")
+
+
+async def _update_profile_points(diary_text: str, reply_target=None) -> None:
+    """Best-effort: refresh the persisted author profile from a diary entry."""
+    await _update_memory_and_chronology(diary_text, reply_target=reply_target)
 
 
 async def _update_chronology(diary_text: str, reply_target=None) -> None:
-    """Best-effort: fold a diary entry into the dated chronology. Never blocks or
-    breaks the roast flow — failures are logged and swallowed.
-
-    `reply_target` is the message the note about the new events replies to. An
-    entry with nothing worth a timeline sends nothing."""
-    await _sync_chronology_memory()
-    existing = state_store.get_chronology()
-    try:
-        events = await roast.extract_chronology_events(diary_text, existing)
-    except Exception:
-        logger.exception("Failed to update the chronology")
-        return
-    async with _memory_lock:
-        if state_store.get_chronology() != existing:
-            logger.info("Chronology moved while extracting; dropping this pass")
-            return
-        state_store.set_chronology(events)
-        await _sync_chronology_memory_held()
-    if reply_target is None:
-        return
-    # Outside the lock: a Telegram send must never hold memory.
-    try:
-        note, sent = await _send_memory_note(
-            reply_target, (CHRONOLOGY_BLOCK_LABEL, _memory_diff_lines(existing, events))
-        )
-        if sent:
-            chain = [
-                {"role": "user", "content": diary_text},
-                {"role": "assistant", "content": note},
-            ]
-            for message in sent:
-                _store_roast_chain(_message_chat_id(message), message.message_id, chain)
-    except Exception:
-        logger.exception("Failed to post the chronology update note")
+    """Best-effort: fold a diary entry into the dated chronology."""
+    await _update_memory_and_chronology(diary_text, reply_target=reply_target)
 
 
 def _memory_diff_lines(
@@ -1280,8 +1276,7 @@ async def _handle_chat_mode_text(update: Update, context: ContextTypes.DEFAULT_T
         chain = await _prepare_chat_chain(chat_id, user_text)
         await _run_roast(message, chain, context, status_message=status)
         _chat_mode_chains[chat_id] = chain
-    context.application.create_task(_update_profile_points(user_text, message))
-    context.application.create_task(_update_chronology(user_text, message))
+    context.application.create_task(_update_memory_and_chronology(user_text, message))
 
 
 async def _handle_chat_mode_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1317,8 +1312,7 @@ async def _handle_chat_mode_voice(update: Update, context: ContextTypes.DEFAULT_
         chain = await _prepare_chat_chain(chat_id, user_text)
         await _run_roast(message, chain, context, status_message=status)
         _chat_mode_chains[chat_id] = chain
-    context.application.create_task(_update_profile_points(user_text, message))
-    context.application.create_task(_update_chronology(user_text, message))
+    context.application.create_task(_update_memory_and_chronology(user_text, message))
 
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1520,8 +1514,7 @@ async def _create_preview(
     if message_key:
         state_store.mark_message_drafted(message_key, entry_id)
     if source_text and source_text.strip():
-        context.application.create_task(_update_profile_points(source_text, preview_msg))
-        context.application.create_task(_update_chronology(source_text, preview_msg))
+        context.application.create_task(_update_memory_and_chronology(source_text, preview_msg))
 
 
 def _callback_payload(update: Update) -> tuple[str, str] | tuple[None, None]:

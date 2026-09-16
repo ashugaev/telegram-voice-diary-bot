@@ -437,6 +437,66 @@ class ChronologyExtractionTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(events, existing)
 
 
+class UnifiedMemoryExtractionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_extract_memory_applies_both_ops_and_shows_ids_to_model(self):
+        raw = json.dumps({
+            "profile_ops": [
+                {"action": "create", "text": "любит горы"},
+                {"action": "delete", "id": "1"},
+            ],
+            "chronology_ops": [
+                {"action": "create", "text": "2026-09-15 — переехал в Лиссабон"},
+                {"action": "delete", "id": "10"},
+            ],
+        })
+        fake = FakeOpenAI(_chat_response(raw))
+
+        with patch.object(roast.settings, "openai_api_key", "key"), \
+                patch.object(roast, "client", fake):
+            extracted = await roast.extract_memory(
+                "entry text",
+                existing_points=_items("старый факт"),
+                existing_events=[memory.MemoryItem("10", "2026-01-01 — начал проект")],
+            )
+
+        self.assertEqual(memory.texts(extracted.points), ["любит горы"])
+        self.assertEqual(memory.texts(extracted.events), ["2026-09-15 — переехал в Лиссабон"])
+        kwargs = fake.chat.completions.calls[0]
+        self.assertEqual(kwargs["model"], roast.settings.openai_profile_model)
+        self.assertEqual(kwargs["max_completion_tokens"], roast.PROFILE_MAX_COMPLETION_TOKENS)
+        self.assertEqual(kwargs["reasoning_effort"], roast.PROFILE_REASONING_EFFORT)
+        self.assertEqual(kwargs["response_format"], {"type": "json_object"})
+        self.assertEqual(kwargs["messages"][0]["content"], roast.UNIFIED_EXTRACTION_PROMPT)
+
+        payload = json.loads(kwargs["messages"][1]["content"])
+        self.assertEqual(payload["today"], diary_today().isoformat())
+        self.assertIn({"id": "1", "text": "старый факт"}, payload["known_facts"])
+        self.assertIn({"id": "10", "text": "2026-01-01 — начал проект"}, payload["known_events"])
+
+    async def test_extract_memory_keeps_existing_lists_on_unusable_json(self):
+        existing_points = _items("старый факт")
+        existing_events = _items("2026-01-01 — начал проект")
+
+        for text in ("", '{"profile_ops": [{"action": "cre', "not json at all"):
+            with self.subTest(text=text):
+                fake = FakeOpenAI(_chat_response(text, finish_reason="length"))
+                with patch.object(roast.settings, "openai_api_key", "key"), \
+                        patch.object(roast, "client", fake):
+                    extracted = await roast.extract_memory(
+                        "entry",
+                        existing_points=existing_points,
+                        existing_events=existing_events,
+                    )
+
+                self.assertEqual(extracted.points, existing_points)
+                self.assertEqual(extracted.events, existing_events)
+
+    async def test_roast_system_prompt_includes_background_extraction_guidance(self):
+        prompt = roast.system_prompt()
+        self.assertIn("Память и хронология автора:", prompt)
+        self.assertIn("автоматически извлекает и сохраняет отдельный фоновый AI-процесс", prompt)
+
+
 class RulesBlockTests(unittest.TestCase):
     def test_no_marker_means_no_change(self):
         # The steady-state answer: nothing to save, nothing to strip.
