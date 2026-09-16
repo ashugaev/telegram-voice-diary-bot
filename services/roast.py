@@ -113,6 +113,48 @@ CHRONOLOGY_EXTRACTION_PROMPT = f"""Ты ведёшь хронологию авт
 id бери ДОСЛОВНО из known_events. Неизвестный id — операция пропадёт, поэтому не выдумывай их.
 Запись не описывает событий для ленты — верни {{"ops": []}}. Это нормальный и частый ответ."""
 
+UNIFIED_EXTRACTION_PROMPT = f"""Ты ведёшь память автора дневника: его профиль личности и хронологию событий жизни.
+Память КОПИТСЯ после КАЖДОЙ записи. Потерять уже известное — самая дорогая ошибка.
+На вход дают новую запись из дневника, известные факты о личности (known_facts с id), известные события хронологии (known_events с id) и сегодняшнюю дату в поле "today".
+
+Ты возвращаешь операции над ДВУМЯ РАЗНЫМИ секциями:
+
+1) "profile_ops" — профиль автора (устойчивый контекст о том, кто он):
+- Долгосрочные черты характера, байасы, привычные паттерны мышления и решений.
+- Ценности, драйверы, страхи, мотивация.
+- Ключевые отношения, работа, проекты, цели, здоровье, устойчивые привычки.
+- Текущая жизненная фаза: среднесрочный период (обновляй, когда меняется).
+НЕ сохраняй сюда:
+- Даты и события жизни (для них есть chronology_ops!). Не создавай фактов с датами ("10 сентября сломал ногу", "в марте переехал").
+- Разовые мелочи (еда, настроение одной минуты, простой пересказ дня).
+
+2) "chronology_ops" — хронология (лента датированных событий жизни):
+- Только значимые вехи: переезды, поездки, смена работы/проектов, старт/финал начинаний, отношения (начало, разрыв), травмы/болезни, крупные покупки/решения.
+- Каждое событие НАЧИНАЕТСЯ с даты: "YYYY-MM-DD — что произошло".
+- Запись не называет дату — бери "today". Называет относительно ("вчера", "в марте") — считай от "today".
+НЕ сохраняй сюда: черты характера, мысли, настроение, обычный быт.
+
+Правила:
+- Одно утверждение — одно короткое простое предложение (факт до {MAX_PROFILE_POINT_LENGTH} символов, событие до {MAX_CHRONOLOGY_EVENT_LENGTH} символов).
+- Дедуп по смыслу: не создавай почти-дубли. Новые детали к известному — через modify, а не новый пункт.
+- Списки растут (фактов до {MAX_PROFILE_POINTS}, событий до {MAX_CHRONOLOGY_EVENTS}). Ничего не выкидывай ради краткости.
+- Не больше {MAX_PROFILE_OPS_PER_NOTE} операций в profile_ops и {MAX_CHRONOLOGY_OPS_PER_NOTE} в chronology_ops.
+- Пиши на русском.
+
+УДАЛЯТЬ (delete) можно ТОЛЬКО в двух случаях:
+1) перестало быть правдой, устарело или событие не произошло;
+2) дубль другого пункта (сворачиваешь через modify одного и delete второго).
+Других причин нет.
+
+Верни СТРОГО JSON вида:
+{{"profile_ops": [...], "chronology_ops": [...]}}
+Каждая операция — объект:
+- {{"action": "create", "text": "..."}}
+- {{"action": "modify", "id": "<id из known_facts или known_events>", "text": "..."}}
+- {{"action": "delete", "id": "<id из known_facts или known_events>"}}
+id бери ДОСЛОВНО. Неизвестный id — операция пропадёт.
+Если по секции менять нечего — верни пустой список []."""
+
 # Appended only when the author supplies priorities for a retrospective pass.
 PROFILE_FOCUS_INSTRUCTION = """Автор задал приоритеты для этого прохода — они в поле "focus".
 Считай их главным фильтром: в первую очередь вытаскивай и уточняй то, что относится к focus, и переформулируй уже известные факты под эти акценты через "update".
@@ -138,13 +180,18 @@ DEFAULT_SYSTEM_PROMPT = """Ты — чёткий пацан, братан авт
 Не делай:
 - Облизывания, пустое подбадривание, комплименты ради галочки, плизерский мусор.
 - Раздутых извинений. Ошибся — коротко исправился и дальше по делу.
-- Не пизди: не уверен — так и скажи. Не заявляй, что что-то сохранил, записал или сделал, если этого не было.
+- Не пизди: не уверен — так и скажи. Не выдумывай фактов, которых не было.
 - Вопрос в конце, «а давай ещё» — ты не клянчишь продолжение. Захочет — сам напишет.
 - Вступления, дисклеймеры, пояснения того, что ты сейчас делаешь.
 
 Заканчиваешь на реальном выводе или наблюдении. Точка.
 
-Если чел отвечает на твоё сообщение — продолжаешь разговор, держа в голове весь предыдущий тред."""
+Если чел отвечает на твоё сообщение — продолжаешь разговор, держа в голове весь предыдущий тред.
+
+Память и хронология автора:
+Факты об авторе и датированные события его жизни автоматически извлекает и сохраняет отдельный фоновый AI-процесс из каждого сообщения.
+- Если автор сообщает факт о себе, рассказывает о событии или просит поправить/уточнить дату в хронологии: НЕ говори, что ты не можешь это сделать, и НЕ извиняйся. Фоновый процесс сам всё сохранит и обновит. Реагируй естественно («Принял», «Зафиксировал», «Ок, Лиссабон так Лиссабон») или развивай диалог по сути.
+- В правила поведения (<<<RULES>>>) пиши ТОЛЬКО рамки твоего общения с автором. НИКОГДА не сохраняй в правила факты об авторе, события или даты."""
 
 CHRONOLOGY_HEADER = """Хронология автора — что и когда с ним происходило (фон, не пересказывай это в лоб):"""
 
@@ -154,7 +201,7 @@ RULES_HEADER = """Правила поведения, которые задал �
 # ever gets recorded.
 RULES_PROTOCOL_PROMPT = f"""Список правил поведения ты ведёшь сам и можешь менять его в ЛЮБОМ ответе: хоть в первом разъёбе, хоть в follow-up реплике. У каждого правила выше есть id в квадратных скобках. Если списка выше нет — он пока пустой.
 - Автор просит вести себя иначе, поправляет тебя, задаёт рамку на будущее — добавь правило. Просит забыть или отменяет прошлое — удали.
-- Только устойчивое «как себя вести». Факты про автора сюда НЕ пиши, для них есть отдельный профиль.
+- Только устойчивое «как себя вести». Факты про автора и даты событий сюда НЕ пиши — память и хронологию обновляет отдельный фоновый процесс.
 - Одно правило — одно короткое простое предложение в повелительном наклонении, до {MAX_RULE_LENGTH} символов.
 - Не добавляй то, что по смыслу уже есть в списке.
 - Удаляй правило только когда автор его отменил или оно свернулось в другое. Не чисти список по своему усмотрению.
@@ -170,6 +217,13 @@ class RoastReply(NamedTuple):
 
     text: str
     rules_ops: list | None
+
+
+class ExtractedMemory(NamedTuple):
+    """Author profile points and dated chronology events produced by unified extraction."""
+
+    points: list[MemoryItem]
+    events: list[MemoryItem]
 
 
 def is_configured() -> bool:
@@ -371,6 +425,56 @@ async def extract_chronology_events(
         ],
     )
     return _merge_extraction(response, existing, "Chronology")
+
+
+async def extract_memory(
+    diary_text: str,
+    existing_points: list[MemoryItem] | None = None,
+    existing_events: list[MemoryItem] | None = None,
+) -> ExtractedMemory:
+    """Fold one diary entry into author profile points and dated chronology events in one pass.
+
+    The model answers with separate operation lists for profile and chronology:
+    {"profile_ops": [...], "chronology_ops": [...]}. Failures degrade to no-ops."""
+    if not is_configured():
+        raise RuntimeError("AI provider API key is not configured")
+
+    points = list(existing_points or [])
+    events = list(existing_events or [])
+    payload = json.dumps(
+        {
+            "diary_entry": diary_text,
+            "today": diary_today().isoformat(),
+            "known_facts": memory.dump(points),
+            "known_events": memory.dump(events),
+        },
+        ensure_ascii=False,
+    )
+    response = await client.chat.completions.create(
+        model=settings.profile_model,
+        max_completion_tokens=PROFILE_MAX_COMPLETION_TOKENS,
+        reasoning_effort=PROFILE_REASONING_EFFORT,
+        response_format={"type": "json_object"},
+        messages=[
+            {"role": "system", "content": UNIFIED_EXTRACTION_PROMPT},
+            {"role": "user", "content": payload},
+        ],
+    )
+    text = _extract_text(response)
+    if text:
+        try:
+            block = json.loads(text)
+        except json.JSONDecodeError:
+            block = None
+        if isinstance(block, dict):
+            new_points = memory.apply_ops(points, block.get("profile_ops"))
+            new_events = memory.apply_ops(events, block.get("chronology_ops"))
+            return ExtractedMemory(new_points, new_events)
+    logger.warning(
+        "Memory extraction returned no usable JSON (finish_reason=%s); keeping the existing lists",
+        _finish_reason(response),
+    )
+    return ExtractedMemory(points, events)
 
 
 SUMMARIZE_SYSTEM_PROMPT = """Ты кратко и емко суммаризируешь предыдущую часть переписки между пользователем и его братаном/коучем (roast bot).

@@ -79,7 +79,7 @@ Beside the profile, the bot keeps a **chronology** — a dated timeline of what 
 
 Only events worth a timeline are stored — trips, moves, job and relationship and health milestones, project starts and ends, big decisions. Moods, meals, and ordinary day recaps are not. An event is removed only when it turned out false or folds into a duplicate.
 
-The timeline is injected into **every** roast and chat request, together with today's date, so the bot can reason about how long ago something was. Changes come as their own `🧠 Memory updated` note with a `Chronology:` block — the timeline is extracted separately from the profile, so an entry that moves both sends two notes.
+The timeline is injected into **every** roast and chat request, together with today's date, so the bot can reason about how long ago something was. Changes come as a `🧠 Memory updated` note with a `Chronology:` block — extracted in the same pass as the profile, so an entry that moves both sends one consolidated note.
 
 It lives on a **`Memory — Chronology`** page next to your diary database and syncs both ways like the other two — see [Configuration](configuration.md#memory-pages).
 
