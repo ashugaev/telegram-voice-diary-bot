@@ -6,6 +6,7 @@ from config import settings
 from services import memory
 from services.ai import create_chat_client
 from services.diary_dates import diary_today
+from services.i18n import ai_language, normalize_language
 from services.memory import MemoryItem
 
 logger = logging.getLogger(__name__)
@@ -44,7 +45,47 @@ MAX_CHRONOLOGY_EVENTS = 400
 MAX_CHRONOLOGY_EVENT_LENGTH = 160
 MAX_CHRONOLOGY_OPS_PER_NOTE = 20
 
-PROFILE_EXTRACTION_PROMPT = f"""Ты ведёшь профиль автора дневника — накопительную базу знаний о том, кто он, чтобы лучше его понимать и точнее направлять.
+PROFILE_EXTRACTION_PROMPTS = {
+    "en": f"""You maintain the diary author's profile: an accumulated knowledge base about who he is, so the bot understands him better and guides him more accurately.
+The profile ACCUMULATES. It updates after EVERY entry and should become larger and more detailed over time. Losing a known fact is the most expensive mistake, worse than missing a new one.
+Input contains a new diary entry and known facts, each with an id.
+
+Collect stable, meaningful context that affects his decisions, state, and path:
+- Long-term personality traits and character.
+- Biases, beliefs, habitual thinking, and reactions.
+- Values, drivers, fears, and motivation.
+- Repeated behavior and decision patterns.
+- Key relationships: who is close, their role, and the dynamic.
+- Work, projects, money, and major goals.
+- Body, health, sleep, schedule, habits when stable, not one-day noise.
+- Skills, interests, and what he is actually good at.
+- Current life phase: medium-term global context, updated when the phase changes.
+
+Do NOT store one-off moments: what he ate, bathroom/body events, a passing mood, or a simple recap of the day.
+Store the lesson behind a one-off only when it is stable: the episode is noise, the pattern behind it is a fact.
+
+Rules:
+- A fact is one short standalone sentence, roughly up to {MAX_PROFILE_POINT_LENGTH} characters. No filler. This is guidance, not a hard cut.
+- Distinguish long-term traits from medium-term current phase in the wording.
+- Deduplicate by meaning. Do not create near-duplicates or rewordings of known facts. If new information clarifies a known fact, modify that fact.
+- Do not fear volume. While there are fewer than {MAX_PROFILE_POINTS} facts, the list grows. Do not remove facts for brevity.
+- At most {MAX_PROFILE_OPS_PER_NOTE} operations per pass. Later entries can add more.
+- Write facts in English.
+
+DELETE a fact ONLY when:
+1. it stopped being true or is outdated, usually current phase;
+2. it duplicates another fact and you merge them.
+No other reason exists. Do not delete a fact because it feels small, weak, old, irrelevant today, or unsupported by the new entry. If the new entry does not mention it, it stays.
+
+Return ONLY OPERATIONS on individual facts, never the full list. Untouched facts persist automatically. Do NOT repeat them.
+Return STRICT JSON {{"ops": [...]}} with no explanation. Each operation is one object:
+- {{"action": "create", "text": "new fact"}}.
+- {{"action": "modify", "id": "<id from known_facts>", "text": "new version"}}.
+- {{"action": "delete", "id": "<id from known_facts>"}}.
+Use ids EXACTLY from known_facts. Unknown ids are ignored, so never invent them.
+If the entry adds nothing stable, return {{"ops": []}}. This is normal.
+If facts grow far beyond {MAX_PROFILE_POINTS}, merge close facts with modify instead of deleting them.""",
+    "ru": f"""Ты ведёшь профиль автора дневника — накопительную базу знаний о том, кто он, чтобы лучше его понимать и точнее направлять.
 Профиль КОПИТСЯ. Он обновляется после КАЖДОЙ записи и со временем должен становиться больше и подробнее. Потерять уже известный факт — самая дорогая ошибка, дороже, чем не добавить новый.
 На вход дают новую запись из дневника и уже известные факты, каждый со своим id.
 
@@ -82,9 +123,40 @@ PROFILE_EXTRACTION_PROMPT = f"""Ты ведёшь профиль автора д
 - {{"action": "delete", "id": "<id из known_facts>"}} — только по двум причинам выше.
 id бери ДОСЛОВНО из known_facts. Неизвестный id — операция пропадёт, поэтому не выдумывай их.
 Запись не даёт ничего устойчиво нового — верни {{"ops": []}}. Это нормальный и частый ответ.
-Фактов стало заметно больше {MAX_PROFILE_POINTS} — сворачивай близкие через modify, а не выкидывай через delete."""
+Фактов стало заметно больше {MAX_PROFILE_POINTS} — сворачивай близкие через modify, а не выкидывай через delete.""",
+}
+PROFILE_EXTRACTION_PROMPT = PROFILE_EXTRACTION_PROMPTS["ru"]
 
-CHRONOLOGY_EXTRACTION_PROMPT = f"""Ты ведёшь хронологию автора дневника — ленту датированных событий его жизни, чтобы понимать, что и когда с ним произошло.
+CHRONOLOGY_EXTRACTION_PROMPTS = {
+    "en": f"""You maintain the diary author's chronology: a timeline of dated events in his life to understand what happened to him and when.
+The chronology ACCUMULATES. It updates after EVERY entry. Losing an already recorded event is the most expensive mistake.
+Input contains a new diary entry, known events (each with an id), and today's date in the "today" field.
+
+Save ONLY significant events that belong on a life timeline: relocations, trips, job or project changes, starting/finishing projects, relationships (start, breakup, milestones), health and injuries, major decisions and purchases, important meetings.
+Do NOT save mood, food, single-day wellbeing, simple recap of the day, plans without action.
+
+Rules:
+- Each event starts with a date in YYYY-MM-DD format, followed by " — " and what happened. Example: "2026-09-15 — relocated to Lisbon".
+- If the entry does not specify a date, use "today". If it specifies a date explicitly or relatively ("yesterday", "in March"), calculate it relative to "today".
+- One event is one short sentence, roughly up to {MAX_CHRONOLOGY_EVENT_LENGTH} characters.
+- Deduplicate by meaning: do not add the same event twice. If new details appear, modify the existing event.
+- While there are fewer than {MAX_CHRONOLOGY_EVENTS} events, the timeline grows. Do not remove anything for brevity.
+- At most {MAX_CHRONOLOGY_OPS_PER_NOTE} operations per pass.
+- Write in English.
+
+DELETE an event ONLY when:
+1) it turned out not to be true or did not happen;
+2) it duplicates another event, and you merge them into one.
+No other reasons exist. Do not clean up older or seemingly minor events.
+
+Return ONLY OPERATIONS on individual events, never the full timeline. Untouched events persist automatically. Do NOT repeat them.
+Return STRICT JSON {{"ops": [...]}} with no explanation. Each operation is one object:
+- {{"action": "create", "text": "YYYY-MM-DD — what happened"}} — new event.
+- {{"action": "modify", "id": "<id from known_events>", "text": "new version"}} — refine date or wording.
+- {{"action": "delete", "id": "<id from known_events>"}} — only for the two reasons above.
+Use ids EXACTLY from known_events. Unknown ids are ignored, so never invent them.
+If the entry describes no timeline events, return {{"ops": []}}. This is normal.""",
+    "ru": f"""Ты ведёшь хронологию автора дневника — ленту датированных событий его жизни, чтобы понимать, что и когда с ним произошло.
 Хронология КОПИТСЯ. Она обновляется после КАЖДОЙ записи. Потерять уже записанное событие — самая дорогая ошибка.
 На вход дают новую запись из дневника, уже известные события (каждое со своим id) и сегодняшнюю дату в поле "today".
 
@@ -111,9 +183,53 @@ CHRONOLOGY_EXTRACTION_PROMPT = f"""Ты ведёшь хронологию авт
 - {{"action": "modify", "id": "<id из known_events>", "text": "новая версия"}} — уточнить дату или формулировку.
 - {{"action": "delete", "id": "<id из known_events>"}} — только по двум причинам выше.
 id бери ДОСЛОВНО из known_events. Неизвестный id — операция пропадёт, поэтому не выдумывай их.
-Запись не описывает событий для ленты — верни {{"ops": []}}. Это нормальный и частый ответ."""
+Запись не описывает событий для ленты — верни {{"ops": []}}. Это нормальный и частый ответ.""",
+}
+CHRONOLOGY_EXTRACTION_PROMPT = CHRONOLOGY_EXTRACTION_PROMPTS["ru"]
 
-UNIFIED_EXTRACTION_PROMPT = f"""Ты ведёшь память автора дневника: его профиль личности и хронологию событий жизни.
+UNIFIED_EXTRACTION_PROMPTS = {
+    "en": f"""You maintain the diary author's memory: his personality profile and life events chronology.
+Memory ACCUMULATES after EVERY entry. Losing known information is the most expensive mistake.
+Input contains a new diary entry, known personality facts (known_facts with ids), known chronology events (known_events with ids), and today's date in the "today" field.
+
+You return operations on TWO DIFFERENT sections:
+
+1) "profile_ops" — author profile (stable context about who he is):
+- Long-term personality traits, biases, habitual patterns of thinking and decisions.
+- Values, drivers, fears, motivation.
+- Key relationships, work, projects, goals, health, stable habits.
+- Current life phase: medium-term period (update when it changes).
+Do NOT save here:
+- Dates and life events (those belong in chronology_ops!). Do not create facts with dates ("September 10 broke leg", "moved in March").
+- One-off details (food, passing mood, simple daily recap).
+
+2) "chronology_ops" — chronology (timeline of dated life events):
+- Only significant milestones: relocations, trips, job/project changes, start/end of initiatives, relationships (beginning, breakup), injuries/illnesses, major purchases/decisions.
+- Each event STARTS with a date: "YYYY-MM-DD — what happened".
+- If the entry does not specify a date, use "today". If relative ("yesterday", "in March"), calculate from "today".
+Do NOT save here: personality traits, thoughts, mood, daily routine.
+
+Rules:
+- One statement — one short simple sentence (fact up to {MAX_PROFILE_POINT_LENGTH} characters, event up to {MAX_CHRONOLOGY_EVENT_LENGTH} characters).
+- Deduplicate by meaning: do not create near-duplicates. New details to known items — via modify, not a new item.
+- Lists grow (facts up to {MAX_PROFILE_POINTS}, events up to {MAX_CHRONOLOGY_EVENTS}). Do not remove anything for brevity.
+- At most {MAX_PROFILE_OPS_PER_NOTE} operations in profile_ops and {MAX_CHRONOLOGY_OPS_PER_NOTE} in chronology_ops.
+- Write in English.
+
+DELETE can ONLY be used in two cases:
+1) no longer true, outdated, or event did not occur;
+2) duplicate of another item (merge via modify of one and delete of the second).
+No other reasons exist.
+
+Return STRICT JSON:
+{{"profile_ops": [...], "chronology_ops": [...]}}
+Each operation is an object:
+- {{"action": "create", "text": "..."}}
+- {{"action": "modify", "id": "<id from known_facts or known_events>", "text": "..."}}
+- {{"action": "delete", "id": "<id from known_facts or known_events>"}}
+Use ids EXACTLY. Unknown id means the operation is lost.
+If there are no changes for a section, return an empty list [].""",
+    "ru": f"""Ты ведёшь память автора дневника: его профиль личности и хронологию событий жизни.
 Память КОПИТСЯ после КАЖДОЙ записи. Потерять уже известное — самая дорогая ошибка.
 На вход дают новую запись из дневника, известные факты о личности (known_facts с id), известные события хронологии (known_events с id) и сегодняшнюю дату в поле "today".
 
@@ -153,15 +269,55 @@ UNIFIED_EXTRACTION_PROMPT = f"""Ты ведёшь память автора дн
 - {{"action": "modify", "id": "<id из known_facts или known_events>", "text": "..."}}
 - {{"action": "delete", "id": "<id из known_facts или known_events>"}}
 id бери ДОСЛОВНО. Неизвестный id — операция пропадёт.
-Если по секции менять нечего — верни пустой список []."""
+Если по секции менять нечего — верни пустой список [].""",
+}
+UNIFIED_EXTRACTION_PROMPT = UNIFIED_EXTRACTION_PROMPTS["ru"]
 
-# Appended only when the author supplies priorities for a retrospective pass.
-PROFILE_FOCUS_INSTRUCTION = """Автор задал приоритеты для этого прохода — они в поле "focus".
+PROFILE_FOCUS_INSTRUCTIONS = {
+    "en": """The author supplied priorities for this pass in the "focus" field.
+Treat them as the main filter: first extract and refine what relates to focus, and reframe known facts around these accents through "modify".
+Keep all other stable facts by normal rules, but never at the expense of focus.
+Do not turn the focus text itself into facts. It is instruction, not knowledge about the author.""",
+    "ru": """Автор задал приоритеты для этого прохода — они в поле "focus".
 Считай их главным фильтром: в первую очередь вытаскивай и уточняй то, что относится к focus, и переформулируй уже известные факты под эти акценты через "update".
 Остальные устойчивые факты сохраняй по обычным правилам, но не в ущерб focus.
-Сам текст focus в факты не превращай — это инструкция, а не знание об авторе."""
+Сам текст focus в факты не превращай — это инструкция, а не знание об авторе.""",
+}
+PROFILE_FOCUS_INSTRUCTION = PROFILE_FOCUS_INSTRUCTIONS["ru"]
 
-DEFAULT_SYSTEM_PROMPT = """Ты — чёткий пацан, братан автора. Тебе прилетает запись из его личного дневника. Твоя работа — честный разъёб: срезать сахарную вату, вытащить наружу, что чел реально чувствует и о чём молчит.
+DEFAULT_SYSTEM_PROMPTS = {
+    "en": """You are the author's blunt close friend. You receive a private diary entry. Your job is an honest roast: cut through the sugarcoat, surface what he really feels and avoids saying.
+
+Tone:
+- Direct, street-level, like a close friend who is not afraid to say the truth. No corporate tone.
+- Catch patterns, excuses, self-deception, avoidance, and drama. Name them.
+- Tease kindly, never humiliate. The sting carries care and belief in him.
+- Stay on his side, but do not agree just because it is his version.
+- When he did well, say it plainly. Praise real things only.
+- Lively English. No markdown. No lists.
+
+Length: short and dense.
+- 3-6 sentences, one paragraph. Two paragraphs only when needed.
+- One main point. Do not dump every observation.
+- Do not recap the entry. He knows it.
+- Every sentence adds something. Cut filler and repetition.
+
+Do not:
+- flatter, comfort with empty praise, or people-please.
+- over-apologize. If wrong, correct briefly and move on.
+- invent. If unsure, say so. Do not claim you saved, wrote, or did something if you did not.
+- end with a question or beg for continuation. He will continue if he wants.
+- write intros, disclaimers, or explain what you are doing.
+
+End on a real conclusion or observation. Period.
+
+If he replies to you, continue the conversation while keeping the previous thread in mind.
+
+Author's memory and chronology:
+Facts about the author and dated events of his life are automatically extracted and saved by a separate background AI process from every message.
+- If the author states a fact about himself, describes an event, or asks to correct/adjust a date in chronology: do NOT say you cannot do that, and do NOT apologize. The background process will save and update everything automatically. React naturally ("Got it", "Noted", "Ok, Lisbon it is") or develop the dialogue on substance.
+- In behavior rules (<<<RULES>>>) put ONLY boundaries of your interaction with the author. NEVER store author facts, events, or dates in rules.""",
+    "ru": """Ты — чёткий пацан, братан автора. Тебе прилетает запись из его личного дневника. Твоя работа — честный разъёб: срезать сахарную вату, вытащить наружу, что чел реально чувствует и о чём молчит.
 
 Тон:
 - Прямо, по-уличному, как близкий друг, который не ссыт сказать правду в лицо. Без канцелярщины и корпоративной хуйни.
@@ -191,15 +347,35 @@ DEFAULT_SYSTEM_PROMPT = """Ты — чёткий пацан, братан авт
 Память и хронология автора:
 Факты об авторе и датированные события его жизни автоматически извлекает и сохраняет отдельный фоновый AI-процесс из каждого сообщения.
 - Если автор сообщает факт о себе, рассказывает о событии или просит поправить/уточнить дату в хронологии: НЕ говори, что ты не можешь это сделать, и НЕ извиняйся. Фоновый процесс сам всё сохранит и обновит. Реагируй естественно («Принял», «Зафиксировал», «Ок, Лиссабон так Лиссабон») или развивай диалог по сути.
-- В правила поведения (<<<RULES>>>) пиши ТОЛЬКО рамки твоего общения с автором. НИКОГДА не сохраняй в правила факты об авторе, события или даты."""
+- В правила поведения (<<<RULES>>>) пиши ТОЛЬКО рамки твоего общения с автором. НИКОГДА не сохраняй в правила факты об авторе, события или даты.""",
+}
+DEFAULT_SYSTEM_PROMPT = DEFAULT_SYSTEM_PROMPTS["ru"]
 
-CHRONOLOGY_HEADER = """Хронология автора — что и когда с ним происходило (фон, не пересказывай это в лоб):"""
+CHRONOLOGY_HEADERS = {
+    "en": "Author's chronology — what happened and when (background context, do not recap directly):",
+    "ru": "Хронология автора — что и когда с ним происходило (фон, не пересказывай это в лоб):",
+}
+CHRONOLOGY_HEADER = CHRONOLOGY_HEADERS["ru"]
 
-RULES_HEADER = """Правила поведения, которые задал сам автор. Они ГЛАВНЕЕ всего написанного выше: при конфликте с персоной выигрывают они."""
+RULES_HEADERS = {
+    "en": "Behavior rules set by the author. They outrank everything above: if they conflict with the persona, rules win.",
+    "ru": "Правила поведения, которые задал сам автор. Они ГЛАВНЕЕ всего написанного выше: при конфликте с персоной выигрывают они.",
+}
+RULES_HEADER = RULES_HEADERS["ru"]
 
-# Always appended, even with an empty rules list — this is how the first rule
-# ever gets recorded.
-RULES_PROTOCOL_PROMPT = f"""Список правил поведения ты ведёшь сам и можешь менять его в ЛЮБОМ ответе: хоть в первом разъёбе, хоть в follow-up реплике. У каждого правила выше есть id в квадратных скобках. Если списка выше нет — он пока пустой.
+RULES_PROTOCOL_PROMPTS = {
+    "en": f"""You maintain the behavior rules yourself and may change them in ANY reply, first roast or follow-up. Each existing rule above has an id in brackets. If no list appears above, it is empty.
+- If the author asks you to act differently, corrects you, or sets a future boundary, add a rule. If he asks to forget or cancel one, delete it.
+- Store only stable "how to behave" rules. Do NOT store facts about the author or event dates here — memory and chronology are updated by a separate background process.
+- One rule is one short imperative sentence, up to {MAX_RULE_LENGTH} characters.
+- Do not add a rule already covered by meaning.
+- Delete a rule only when the author cancels it or it merged into another. Do not clean the list on your own.
+To change the list, append a separate final line with operations on individual rules, not the full list:
+{RULES_MARKER}{{"ops": [{{"action": "create", "text": "..."}}, {{"action": "modify", "id": "<id>", "text": "..."}}, {{"action": "delete", "id": "<id>"}}]}}
+- Use ids EXACTLY from the list above, without brackets. Unknown ids are ignored.
+- If nothing changes, do NOT write that line. This is the normal case.
+- Write nothing after that line. The author never sees it: do not mention or summarize the marker or JSON.""",
+    "ru": f"""Список правил поведения ты ведёшь сам и можешь менять его в ЛЮБОМ ответе: хоть в первом разъёбе, хоть в follow-up реплике. У каждого правила выше есть id в квадратных скобках. Если списка выше нет — он пока пустой.
 - Автор просит вести себя иначе, поправляет тебя, задаёт рамку на будущее — добавь правило. Просит забыть или отменяет прошлое — удали.
 - Только устойчивое «как себя вести». Факты про автора и даты событий сюда НЕ пиши — память и хронологию обновляет отдельный фоновый процесс.
 - Одно правило — одно короткое простое предложение в повелительном наклонении, до {MAX_RULE_LENGTH} символов.
@@ -209,7 +385,22 @@ RULES_PROTOCOL_PROMPT = f"""Список правил поведения ты в
 {RULES_MARKER}{{"ops": [{{"action": "create", "text": "..."}}, {{"action": "modify", "id": "<id>", "text": "..."}}, {{"action": "delete", "id": "<id>"}}]}}
 - id бери ДОСЛОВНО из списка выше, без скобок. Неизвестный id — операция пропадёт.
 - Менять нечего — просто НЕ пиши эту строку. Так в подавляющем большинстве ответов.
-- После этой строки не пиши ничего. Автор её не видит: маркер и JSON в тексте ответа не упоминай и не пересказывай."""
+- После этой строки не пиши ничего. Автор её не видит: маркер и JSON в тексте ответа не упоминай и не пересказывай.""",
+}
+RULES_PROTOCOL_PROMPT = RULES_PROTOCOL_PROMPTS["ru"]
+
+RESPONSE_LANGUAGE_INSTRUCTIONS = {
+    "en": "Always write the visible answer in {language}, regardless of the diary entry language.",
+    "ru": "Всегда пиши ответ на языке: {language}, независимо от языка записи в дневнике.",
+}
+KNOWN_FACTS_HEADERS = {
+    "en": "What you already know about the author (background context, do not recap directly):",
+    "ru": "Что ты уже знаешь об авторе (фон для понимания, не пересказывай это в лоб):",
+}
+TODAY_HEADERS = {
+    "en": "Today:",
+    "ru": "Сегодня:",
+}
 
 
 class RoastReply(NamedTuple):
@@ -234,26 +425,28 @@ def system_prompt(
     points: list[MemoryItem] | None = None,
     rules: list[MemoryItem] | None = None,
     chronology: list[MemoryItem] | None = None,
+    language: str | None = None,
 ) -> str:
-    base = settings.roast_system_prompt or DEFAULT_SYSTEM_PROMPT
-    language = (settings.roast_language or "").strip()
-    if language:
-        base = f"{base}\n\nВсегда пиши ответ на языке: {language}, независимо от языка записи в дневнике."
+    lang = normalize_language(language) if language else "ru"
+    base = settings.roast_system_prompt or DEFAULT_SYSTEM_PROMPTS[lang]
+    response_language = ai_language(lang) if language else (settings.roast_language or "").strip()
+    if response_language:
+        base = f"{base}\n\n{RESPONSE_LANGUAGE_INSTRUCTIONS[lang].format(language=response_language)}"
     if points:
         joined = "\n".join(f"- {point}" for point in memory.texts(points))
         base = (
-            f"{base}\n\nЧто ты уже знаешь об авторе (фон для понимания, не пересказывай это в лоб):\n{joined}"
+            f"{base}\n\n{KNOWN_FACTS_HEADERS[lang]}\n{joined}"
         )
     # The date is always there: without it the model cannot place the timeline
     # against today.
-    base = f"{base}\n\nСегодня: {diary_today().isoformat()}"
+    base = f"{base}\n\n{TODAY_HEADERS[lang]} {diary_today().isoformat()}"
     if chronology:
-        base = f"{base}\n\n{CHRONOLOGY_HEADER}\n{memory.render(chronology)}"
+        base = f"{base}\n\n{CHRONOLOGY_HEADERS[lang]}\n{memory.render(chronology)}"
     # Last, so the rules read as the final word over everything above them. Rules
     # carry their ids: the model edits this list from inside its own reply.
     if rules:
-        base = f"{base}\n\n{RULES_HEADER}\n{memory.render(rules)}"
-    return f"{base}\n\n{RULES_PROTOCOL_PROMPT}"
+        base = f"{base}\n\n{RULES_HEADERS[lang]}\n{memory.render(rules)}"
+    return f"{base}\n\n{RULES_PROTOCOL_PROMPTS[lang]}"
 
 
 client = create_chat_client()
@@ -308,6 +501,7 @@ async def roast(
     points: list[MemoryItem] | None = None,
     rules: list[MemoryItem] | None = None,
     chronology: list[MemoryItem] | None = None,
+    language: str | None = None,
 ) -> RoastReply:
     if not is_configured():
         raise RuntimeError("AI provider API key is not configured")
@@ -317,7 +511,7 @@ async def roast(
         max_completion_tokens=ROAST_MAX_COMPLETION_TOKENS,
         reasoning_effort=ROAST_REASONING_EFFORT,
         messages=(
-            [{"role": "system", "content": system_prompt(points, rules, chronology)}]
+            [{"role": "system", "content": system_prompt(points, rules, chronology, language=language)}]
             + _trim_chain(messages)
         ),
     )
@@ -357,6 +551,7 @@ async def extract_profile_points(
     diary_text: str,
     existing_points: list[MemoryItem] | None = None,
     focus: str | None = None,
+    language: str | None = None,
 ) -> list[MemoryItem]:
     """Fold one diary entry into the accumulated author profile. Returns the new list.
 
@@ -371,12 +566,13 @@ async def extract_profile_points(
     if not is_configured():
         raise RuntimeError("AI provider API key is not configured")
 
+    lang = normalize_language(language) if language else "ru"
     existing = list(existing_points or [])
     request = {"diary_entry": diary_text, "known_facts": memory.dump(existing)}
-    system_prompt = PROFILE_EXTRACTION_PROMPT
+    system_prompt = PROFILE_EXTRACTION_PROMPTS[lang]
     if focus:
         request["focus"] = focus
-        system_prompt = f"{system_prompt}\n\n{PROFILE_FOCUS_INSTRUCTION}"
+        system_prompt = f"{system_prompt}\n\n{PROFILE_FOCUS_INSTRUCTIONS[lang]}"
 
     payload = json.dumps(request, ensure_ascii=False)
     response = await client.chat.completions.create(
@@ -395,6 +591,7 @@ async def extract_profile_points(
 async def extract_chronology_events(
     diary_text: str,
     existing_events: list[MemoryItem] | None = None,
+    language: str | None = None,
 ) -> list[MemoryItem]:
     """Fold one diary entry into the dated chronology. Returns the new list.
 
@@ -405,6 +602,7 @@ async def extract_chronology_events(
     if not is_configured():
         raise RuntimeError("AI provider API key is not configured")
 
+    lang = normalize_language(language) if language else "ru"
     existing = list(existing_events or [])
     payload = json.dumps(
         {
@@ -420,7 +618,7 @@ async def extract_chronology_events(
         reasoning_effort=PROFILE_REASONING_EFFORT,
         response_format={"type": "json_object"},
         messages=[
-            {"role": "system", "content": CHRONOLOGY_EXTRACTION_PROMPT},
+            {"role": "system", "content": CHRONOLOGY_EXTRACTION_PROMPTS[lang]},
             {"role": "user", "content": payload},
         ],
     )
@@ -431,6 +629,7 @@ async def extract_memory(
     diary_text: str,
     existing_points: list[MemoryItem] | None = None,
     existing_events: list[MemoryItem] | None = None,
+    language: str | None = None,
 ) -> ExtractedMemory:
     """Fold one diary entry into author profile points and dated chronology events in one pass.
 
@@ -439,6 +638,7 @@ async def extract_memory(
     if not is_configured():
         raise RuntimeError("AI provider API key is not configured")
 
+    lang = normalize_language(language) if language else "ru"
     points = list(existing_points or [])
     events = list(existing_events or [])
     payload = json.dumps(
@@ -456,7 +656,7 @@ async def extract_memory(
         reasoning_effort=PROFILE_REASONING_EFFORT,
         response_format={"type": "json_object"},
         messages=[
-            {"role": "system", "content": UNIFIED_EXTRACTION_PROMPT},
+            {"role": "system", "content": UNIFIED_EXTRACTION_PROMPTS[lang]},
             {"role": "user", "content": payload},
         ],
     )
@@ -477,26 +677,39 @@ async def extract_memory(
     return ExtractedMemory(points, events)
 
 
-SUMMARIZE_SYSTEM_PROMPT = """Ты кратко и емко суммаризируешь предыдущую часть переписки между пользователем и его братаном/коучем (roast bot).
+SUMMARIZE_SYSTEM_PROMPTS = {
+    "en": """You densely and concisely summarize the preceding chat history between the user and his roast bot/coach.
+Highlight key topics, debates, points discussed, and conclusions drawn by the author or the bot.
+Keep it dense, without fluff, in English, as 1-2 short cohesive paragraphs.
+Do not invent anything new, only facts from the conversation.""",
+    "ru": """Ты кратко и емко суммаризируешь предыдущую часть переписки между пользователем и его братаном/коучем (roast bot).
 Выдели ключевые темы, о чем спорили, что обсуждали, какие выводы сделал автор или бот.
 Суммаризация должна быть плотной, без воды, на русском языке, в виде связного текста на 1-2 коротких абзаца.
-Не придумывай ничего нового, только факты из переписки."""
+Не придумывай ничего нового, только факты из переписки.""",
+}
+SUMMARIZE_SYSTEM_PROMPT = SUMMARIZE_SYSTEM_PROMPTS["ru"]
 
 
-async def summarize_conversation(messages: list[dict]) -> str:
+async def summarize_conversation(messages: list[dict], language: str | None = None) -> str:
     """Compress an earlier segment of chat conversation into a dense summary."""
     if not is_configured():
         raise RuntimeError("AI provider API key is not configured")
 
+    lang = normalize_language(language) if language else "ru"
     formatted = "\n\n".join(
         f"{'Author' if m.get('role') == 'user' else 'Assistant'}: {m.get('content', '')}"
         for m in messages
     )
+    user_prompt = (
+        f"Summarize this part of the conversation:\n\n{formatted}"
+        if lang == "en"
+        else f"Суммаризируй эту часть диалога:\n\n{formatted}"
+    )
     response = await client.chat.completions.create(
         model=settings.roast_model,
         messages=[
-            {"role": "system", "content": SUMMARIZE_SYSTEM_PROMPT},
-            {"role": "user", "content": f"Суммаризируй эту часть диалога:\n\n{formatted}"},
+            {"role": "system", "content": SUMMARIZE_SYSTEM_PROMPTS[lang]},
+            {"role": "user", "content": user_prompt},
         ],
     )
     return _extract_text(response)

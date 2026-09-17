@@ -333,12 +333,12 @@ class CreatePreviewTests(unittest.IsolatedAsyncioTestCase):
             )
 
         entry_date = bot._default_entry_date()
-        fake_formatter.assert_awaited_once_with("raw transcription")
+        fake_formatter.assert_awaited_once_with("raw transcription", language="en")
         self.assertEqual(len(fake_context.bot.edits), 1)
         edit = fake_context.bot.edits[0]
         self.assertEqual(edit["chat_id"], 123)
         self.assertEqual(edit["message_id"], 20)
-        self.assertEqual(edit["text"], bot._preview_text("Title", "Body", ["work"], entry_date))
+        self.assertEqual(edit["text"], bot._preview_text("Title", "Body", ["work"], entry_date, language="en"))
         self.assertEqual(edit["parse_mode"], "HTML")
         self.assertEqual(fake_state_store.marked_drafted, [("123:10", "entry-1")])
         self.assertEqual(fake_state_store.saved_drafts[0]["preview_msg_id"], 20)
@@ -374,7 +374,7 @@ class CreatePreviewTests(unittest.IsolatedAsyncioTestCase):
         ):
             await bot._create_preview(source_message, fake_context, "plain text")
 
-        fake_formatter.assert_awaited_once_with("plain text")
+        fake_formatter.assert_awaited_once_with("plain text", language="en")
         self.assertEqual(len(fake_context.bot.sent_messages), 1)
         reply_parameters = fake_context.bot.sent_messages[0]["reply_parameters"]
         self.assertEqual(reply_parameters.message_id, 10)
@@ -520,7 +520,7 @@ class CreatePreviewTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(len(fake_context.application.created_tasks), 1)
         # The preview message carries the note about whatever the entry taught.
-        fake_update.assert_called_once_with("plain text", processing_message)
+        fake_update.assert_called_once_with("plain text", processing_message, language="en")
 
 
 class DuplicateVoiceFlowTests(unittest.IsolatedAsyncioTestCase):
@@ -1044,7 +1044,7 @@ class MainRegistrationTests(unittest.TestCase):
 
         self.assertEqual(
             set(command_filters),
-            {"start", "help", "diary", "chat", "weekly", "stat", "memory", "rules"},
+            {"start", "help", "diary", "chat", "weekly", "stat", "memory", "rules", "lang"},
         )
         self.assertEqual(set(command_filters), {name for name, _ in bot.COMMANDS})
         for command, command_filter in command_filters.items():
@@ -1057,11 +1057,75 @@ class MainRegistrationTests(unittest.TestCase):
                 self.assertIn(f"/{name} — {description}", bot.HELP_TEXT)
 
 
+class LanguageCommandTests(unittest.IsolatedAsyncioTestCase):
+    async def test_lang_command_without_args_shows_picker(self):
+        message = SimpleNamespace(chat_id=123, reply_text=AsyncMock())
+        update = SimpleNamespace(effective_message=message)
+        context = SimpleNamespace(args=[])
+
+        await bot.handle_lang(update, context)
+
+        message.reply_text.assert_awaited_once()
+        text, kwargs = message.reply_text.await_args.args[0], message.reply_text.await_args.kwargs
+        self.assertIn("Current language", text)
+        markup = kwargs["reply_markup"]
+        self.assertIsInstance(markup, bot.InlineKeyboardMarkup)
+        buttons = [btn.callback_data for row in markup.inline_keyboard for btn in row]
+        self.assertEqual(buttons, ["lang:en", "lang:ru"])
+
+    async def test_lang_command_with_arg_switches_language(self):
+        message = SimpleNamespace(chat_id=123, reply_text=AsyncMock())
+        update = SimpleNamespace(effective_message=message)
+        context = SimpleNamespace(args=["ru"], bot=SimpleNamespace(set_my_commands=AsyncMock()))
+
+        with patch.object(bot.state_store, "set_language") as mock_set:
+            await bot.handle_lang(update, context)
+
+        mock_set.assert_called_once_with("ru")
+        message.reply_text.assert_awaited_once()
+        self.assertIn("Русский", message.reply_text.await_args.args[0])
+
+    async def test_language_callback_saves_language_and_updates_chat_commands(self):
+        query = FakeQuery(data="lang:ru")
+        context = SimpleNamespace(bot=SimpleNamespace(set_my_commands=AsyncMock()))
+        update = SimpleNamespace(callback_query=query)
+
+        with patch.object(bot.state_store, "set_language") as set_language:
+            await bot.language_callback(update, context)
+
+        set_language.assert_called_once_with("ru")
+        kwargs = context.bot.set_my_commands.await_args.kwargs
+        self.assertEqual(kwargs["scope"].chat_id, 123)
+        self.assertIn("Русский", query.edits[0]["text"])
+
+    async def test_start_offers_language_picker_and_welcome(self):
+        replies = []
+
+        class Message:
+            chat_id = 42
+            message_id = 1
+
+            async def reply_text(self, text, **kwargs):
+                replies.append((text, kwargs))
+
+        update = SimpleNamespace(effective_message=Message(), args=[])
+        context = SimpleNamespace(bot=SimpleNamespace())
+
+        await bot.handle_start(update, context)
+
+        self.assertEqual(len(replies), 2)
+        # First message offers language selection with inline buttons
+        self.assertIsInstance(replies[0][1]["reply_markup"], bot.InlineKeyboardMarkup)
+        # Second message is the welcome message with reply keyboard
+        self.assertIn("Diary bot is online", replies[1][0])
+        self.assertIsInstance(replies[1][1]["reply_markup"], bot.ReplyKeyboardMarkup)
+
+
 class PostInitTests(unittest.IsolatedAsyncioTestCase):
     def _application(self):
         bot_api = SimpleNamespace(published=None)
 
-        async def set_my_commands(commands):
+        async def set_my_commands(commands, **kwargs):
             bot_api.published = commands
 
         bot_api.set_my_commands = set_my_commands
@@ -1223,6 +1287,7 @@ class FakeStateStore:
         duration=None,
         file_size=None,
         source_message_url=None,
+        language=None,
     ):
         key = f"{chat_id}:{message_id}"
         self.messages[key] = {
@@ -1236,8 +1301,18 @@ class FakeStateStore:
             "file_size": file_size,
             "source_message_url": source_message_url,
             "date": date,
+            "language": language,
         }
         return key
+
+    def get_saved_language(self):
+        return None
+
+    def get_language(self):
+        return "en"
+
+    def set_language(self, language):
+        pass
 
     def find_duplicate_voice(self, file_unique_id, duration=None, file_size=None, exclude_key=None):
         return self.duplicate_voice
@@ -2550,13 +2625,22 @@ class ModeSwitchTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(bot.state_store, "set_mode") as mock_set_mode:
             await bot.handle_chat_mode(update, context)
             mock_set_mode.assert_called_with(42, "chat")
-            self.assertIn("Режим пиздежа", replies[-1][0])
-            self.assertEqual(replies[-1][1]["reply_markup"].keyboard[0][0].text, bot.KEYBOARD_TO_DIARY_BUTTON)
+            self.assertIn("Chat mode enabled", replies[-1][0])
+            self.assertEqual(replies[-1][1]["reply_markup"].keyboard[0][0].text, "📖 Switch to Diary")
 
             await bot.handle_diary_mode(update, context)
             mock_set_mode.assert_called_with(42, "diary")
-            self.assertIn("Режим дневника", replies[-1][0])
-            self.assertEqual(replies[-1][1]["reply_markup"].keyboard[0][0].text, bot.KEYBOARD_TO_CHAT_BUTTON)
+            self.assertIn("Diary mode enabled", replies[-1][0])
+            self.assertEqual(replies[-1][1]["reply_markup"].keyboard[0][0].text, "🔥 Switch to Chat")
+
+            with patch.object(bot.state_store, "get_saved_language", return_value="ru"):
+                await bot.handle_chat_mode(update, context)
+                self.assertIn("Режим пиздежа", replies[-1][0])
+                self.assertEqual(replies[-1][1]["reply_markup"].keyboard[0][0].text, bot.KEYBOARD_TO_DIARY_BUTTON)
+
+                await bot.handle_diary_mode(update, context)
+                self.assertIn("Режим дневника", replies[-1][0])
+                self.assertEqual(replies[-1][1]["reply_markup"].keyboard[0][0].text, bot.KEYBOARD_TO_CHAT_BUTTON)
 
         with patch.object(bot, "handle_chat_mode", new=AsyncMock()) as mock_chat, \
                 patch.object(bot, "handle_diary_mode", new=AsyncMock()) as mock_diary:

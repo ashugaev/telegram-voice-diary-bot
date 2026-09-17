@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from services import memory
+from services.i18n import DEFAULT_LANGUAGE, normalize_language
 from services.memory import MemoryItem
 
 
@@ -56,6 +57,9 @@ class StateStore:
         data.setdefault("chronology", {})
         data["chronology"].setdefault("items", [])
         data["chronology"].setdefault("notion_mirror", [])
+        data.setdefault("settings", {})
+        if data["settings"].get("language"):
+            data["settings"]["language"] = normalize_language(data["settings"].get("language"))
         return data
 
     def _save(self) -> None:
@@ -88,12 +92,17 @@ class StateStore:
         text: str,
         date: str | None,
         source_message_url: str | None = None,
+        language: str | None = None,
     ) -> str:
         return self._record_message(
             chat_id,
             message_id,
             "text",
-            {"text": text, "source_message_url": source_message_url},
+            {
+                "text": text,
+                "source_message_url": source_message_url,
+                "language": normalize_language(language) if language else self.get_language(),
+            },
             date,
         )
 
@@ -107,6 +116,7 @@ class StateStore:
         duration: int | None = None,
         file_size: int | None = None,
         source_message_url: str | None = None,
+        language: str | None = None,
     ) -> str:
         payload = {
             "file_id": file_id,
@@ -114,6 +124,7 @@ class StateStore:
             "duration": duration,
             "file_size": file_size,
             "source_message_url": source_message_url,
+            "language": normalize_language(language) if language else self.get_language(),
         }
         return self._record_message(chat_id, message_id, "voice", payload, date)
 
@@ -286,6 +297,20 @@ class StateStore:
         if self.data[section].get("notion_mirror") == items:
             return
         self.data[section]["notion_mirror"] = list(items)
+        self._save()
+
+    def get_language(self) -> str:
+        settings = self.data.setdefault("settings", {})
+        return normalize_language(settings.get("language", DEFAULT_LANGUAGE))
+
+    def get_saved_language(self) -> str | None:
+        language = self.data.get("settings", {}).get("language")
+        return normalize_language(language) if language else None
+
+    def set_language(self, language: str) -> None:
+        normalized = normalize_language(language)
+        self.data.setdefault("settings", {})["language"] = normalized
+        self.data["settings"]["updated_at"] = _now()
         self._save()
 
     def save_draft(self, draft: dict[str, Any]) -> None:
