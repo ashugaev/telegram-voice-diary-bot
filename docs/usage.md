@@ -118,3 +118,11 @@ Every day at 21:00 (your timezone) the bot posts a summary of that day's entries
 `/stat` shows total saved audio time, minutes for each of the last 7 days, and monthly totals for the last 6 months — computed from saved Notion rows with `Audio Duration` filled in.
 
 Date-picker defaults and summaries respect `DIARY_DAY_START_HOUR`: with `DIARY_DAY_START_HOUR=4`, entries before 04:00 belong to the previous diary date.
+
+## Language localization — `/lang`
+
+The bot supports English (default) and Russian:
+- `/start` welcomes you in English and offers inline buttons to choose your language.
+- `/lang` shows your current language with buttons to switch.
+- `/lang en` and `/lang ru` switch the language directly.
+- The selection persists across restarts. All messages, buttons, menus, and prompts adapt to the chosen language.
