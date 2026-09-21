@@ -1062,6 +1062,108 @@ async def _roast_draft(query, context: ContextTypes.DEFAULT_TYPE, draft: dict) -
     await _run_roast(query.message, chain, context, status_message=status)
 
 
+def _is_memory_note_text(text: str) -> bool:
+    cleaned = (text or "").strip()
+    return any(
+        cleaned.startswith(header)
+        for header in (MEMORY_NOTE_HEADER, t("memory.updated", "ru"), t("memory.updated", "en"))
+    )
+
+
+def _memory_note_from_chain(chain: list[dict]) -> str | None:
+    for message in reversed(chain):
+        if message.get("role") == "assistant" and _is_memory_note_text(message.get("content", "")):
+            return message["content"]
+    return None
+
+
+def _original_entry_from_chain(chain: list[dict]) -> str:
+    if chain and chain[0].get("role") == "user":
+        return (chain[0].get("content") or "").strip()
+    return ""
+
+
+def _format_memory_reply_context(
+    original_entry: str,
+    note_text: str,
+    reply_text: str,
+    language: str | None = None,
+) -> str:
+    lang = normalize_language(language) if language else "ru"
+    if lang == "en":
+        prefix = f"Previous entry: {original_entry}\n" if original_entry else ""
+        return f"{prefix}Memory update:\n{note_text}\n\nUser reply to this update:\n{reply_text}"
+    prefix = f"Предыдущая запись: {original_entry}\n" if original_entry else ""
+    return f"{prefix}Обновление памяти:\n{note_text}\n\nОтвет/уточнение пользователя:\n{reply_text}"
+
+
+async def _compact_chat_chain(chain: list[dict], language: str | None = None) -> list[dict]:
+    if len(chain) >= CHAT_MODE_MAX_MESSAGES:
+        to_summarize = chain[:-CHAT_MODE_RETAIN_MESSAGES]
+        tail = chain[-CHAT_MODE_RETAIN_MESSAGES:]
+        try:
+            summary = await roast.summarize_conversation(to_summarize, language=language)
+            if summary:
+                lang = normalize_language(language)
+                prefix = (
+                    "Summary of previous conversation:\n"
+                    if lang == "en"
+                    else "Краткое содержание предыдущей части разговора:\n"
+                )
+                return [
+                    {
+                        "role": "system",
+                        "content": f"{prefix}{summary.strip()}",
+                    }
+                ] + tail
+        except Exception:
+            logger.exception("Error summarizing chat conversation")
+    return chain
+
+
+async def _process_roast_followup(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    chain: list[dict],
+    reply_text: str,
+    status_message=None,
+) -> None:
+    user_msg = update.effective_message
+    language = _message_language(user_msg, update)
+    chat_id = _message_chat_id(user_msg)
+    is_chat_mode = state_store.get_mode(chat_id) == MODE_CHAT
+    note_text = _memory_note_from_chain(chain)
+
+    if is_chat_mode:
+        async with _get_chat_mode_lock(chat_id):
+            chat_chain = list(_chat_mode_chains.get(chat_id, []))
+            if chat_chain:
+                if note_text and not any(m.get("content") == note_text for m in chat_chain):
+                    chat_chain.append({"role": "assistant", "content": note_text})
+                chat_chain.append({"role": "user", "content": reply_text})
+                roast_chain_to_run = await _compact_chat_chain(chat_chain, language=language)
+            else:
+                roast_chain_to_run = list(chain) + [{"role": "user", "content": reply_text}]
+            await _run_roast(user_msg, roast_chain_to_run, context, status_message=status_message)
+            _chat_mode_chains[chat_id] = roast_chain_to_run
+    else:
+        new_chain = list(chain) + [{"role": "user", "content": reply_text}]
+        await _run_roast(user_msg, new_chain, context, status_message=status_message)
+
+    if note_text:
+        original_entry = _original_entry_from_chain(chain)
+        extraction_text = _format_memory_reply_context(original_entry, note_text, reply_text, language=language)
+        if hasattr(context, "application") and context.application:
+            context.application.create_task(
+                _update_memory_and_chronology(extraction_text, reply_target=user_msg, language=language)
+            )
+    elif is_chat_mode:
+        if hasattr(context, "application") and context.application:
+            context.application.create_task(
+                _update_memory_and_chronology(reply_text, reply_target=user_msg, language=language)
+            )
+
+
 async def _handle_roast_followup(update: Update, context: ContextTypes.DEFAULT_TYPE, chain: list[dict]) -> None:
     user_msg = update.effective_message
     language = _message_language(user_msg, update)
@@ -1070,9 +1172,8 @@ async def _handle_roast_followup(update: Update, context: ContextTypes.DEFAULT_T
         await handle_text(update, context)
         return
 
-    new_chain = list(chain) + [{"role": "user", "content": reply_text}]
     status = await _reply_to_source(user_msg, t("roast.thinking", language))
-    await _run_roast(user_msg, new_chain, context, status_message=status)
+    await _process_roast_followup(update, context, chain, reply_text, status_message=status)
 
 
 async def _handle_roast_voice_followup(
@@ -1104,9 +1205,8 @@ async def _handle_roast_voice_followup(
         settings.openai_transcription_model,
         reply_text,
     )
-    new_chain = list(chain) + [{"role": "user", "content": reply_text}]
     await _edit_reply_message(context, status, t("roast.thinking", language))
-    await _run_roast(user_msg, new_chain, context, status_message=status)
+    await _process_roast_followup(update, context, chain, reply_text, status_message=status)
 
 
 async def _set_chat_commands(context: ContextTypes.DEFAULT_TYPE, chat_id: int, language: str) -> None:
@@ -1369,29 +1469,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 async def _prepare_chat_chain(chat_id: int, new_user_text: str, language: str | None = None) -> list[dict]:
     chain = list(_chat_mode_chains.get(chat_id, []))
     chain.append({"role": "user", "content": new_user_text})
-
-    if len(chain) >= CHAT_MODE_MAX_MESSAGES:
-        to_summarize = chain[:-CHAT_MODE_RETAIN_MESSAGES]
-        tail = chain[-CHAT_MODE_RETAIN_MESSAGES:]
-        try:
-            summary = await roast.summarize_conversation(to_summarize, language=language)
-            if summary:
-                lang = normalize_language(language)
-                prefix = (
-                    "Summary of previous conversation:\n"
-                    if lang == "en"
-                    else "Краткое содержание предыдущей части разговора:\n"
-                )
-                chain = [
-                    {
-                        "role": "system",
-                        "content": f"{prefix}{summary.strip()}",
-                    }
-                ] + tail
-        except Exception:
-            logger.exception("Error summarizing chat conversation")
-
-    return chain
+    return await _compact_chat_chain(chain, language=language)
 
 
 async def _handle_chat_mode_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -1785,6 +1785,44 @@ class RoastFlowTests(unittest.IsolatedAsyncioTestCase):
             {"role": "user", "content": "that needs an edit"},
         ]])
 
+    async def test_reply_to_memory_note_schedules_memory_update_with_context(self):
+        fake_bot = FakeRoastBot()
+        note = "🧠 Memory updated\nAbout you:\n+ играет в пинг-понг"
+        bot._roast_chains["123:1001"] = [
+            {"role": "user", "content": "today's entry"},
+            {"role": "assistant", "content": note},
+        ]
+        user_msg = SimpleNamespace(
+            text="that needs an edit",
+            reply_to_message=SimpleNamespace(message_id=1001),
+            chat_id=123,
+            message_id=30,
+            get_bot=lambda: fake_bot,
+        )
+        update = SimpleNamespace(effective_message=user_msg, effective_chat=SimpleNamespace(id=123))
+        created_tasks = []
+        context = SimpleNamespace(
+            bot=fake_bot,
+            user_data={},
+            application=SimpleNamespace(create_task=lambda task, **kwargs: created_tasks.append(task)),
+        )
+
+        with patch.object(bot.roast, "roast", return_value=_roast_reply("updated")), \
+                patch.object(bot.state_store, "get_profile_points", return_value=[]), \
+                patch.object(bot.state_store, "get_rules", return_value=[]), \
+                patch.object(bot, "_sync_memory", new=AsyncMock()), \
+                patch.object(bot, "_update_memory_and_chronology", new=AsyncMock()) as mock_memory:
+            await bot.receive_edit_reply(update, context)
+
+        self.assertEqual(len(created_tasks), 1)
+        await created_tasks[0]
+        mock_memory.assert_awaited_once()
+        called_args, called_kwargs = mock_memory.await_args
+        self.assertIn("today's entry", called_args[0])
+        self.assertIn(note, called_args[0])
+        self.assertIn("that needs an edit", called_args[0])
+        self.assertEqual(called_kwargs.get("reply_target"), user_msg)
+
     async def test_long_profile_note_maps_every_chunk_to_its_full_context(self):
         long_fact = "x" * (bot.TELEGRAM_MESSAGE_LIMIT + 100)
         fake_bot = await self._extract_with_note([], _items(long_fact))
@@ -3026,5 +3064,173 @@ class ChatModeFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("⏳ В очереди...", edited_texts)
         self.assertIn("🔥 Думаю...", edited_texts)
 
+    async def test_chat_mode_reply_to_memory_note_updates_chain_and_schedules_memory_update(self):
+        fake_bot = FakeRoastBot()
+        created_tasks = []
+        bot._chat_mode_chains[500] = [
+            {"role": "user", "content": "yesterday I moved"},
+            {"role": "assistant", "content": "cool move"},
+        ]
+        note = "🧠 Memory updated\nChronology:\n+ 2026-09-20 — moved"
+        bot._roast_chains["500:1001"] = [
+            {"role": "user", "content": "yesterday I moved"},
+            {"role": "assistant", "content": note},
+        ]
 
+        class Message:
+            chat_id = 500
+            message_id = 50
+            text = "didn't move, just visited"
+            reply_to_message = SimpleNamespace(message_id=1001)
+
+            def get_bot(self):
+                return fake_bot
+
+        update = SimpleNamespace(effective_message=Message(), effective_chat=SimpleNamespace(id=500))
+        context = SimpleNamespace(
+            bot=fake_bot,
+            user_data={},
+            application=SimpleNamespace(create_task=lambda task, **kwargs: created_tasks.append(task)),
+        )
+
+        with patch.object(bot.state_store, "get_mode", return_value="chat"),                 patch.object(bot, "_run_roast", new=AsyncMock()) as mock_roast,                 patch.object(bot, "_update_memory_and_chronology", new=AsyncMock()) as mock_memory:
+            await bot.receive_edit_reply(update, context)
+
+            mock_roast.assert_awaited_once()
+            chain_passed = mock_roast.await_args[0][1]
+            self.assertEqual(chain_passed[0]["content"], "yesterday I moved")
+            self.assertEqual(chain_passed[1]["content"], "cool move")
+            self.assertEqual(chain_passed[2]["content"], note)
+            self.assertEqual(chain_passed[3]["content"], "didn't move, just visited")
+            self.assertEqual(bot._chat_mode_chains[500], chain_passed)
+
+            self.assertEqual(len(created_tasks), 1)
+            await created_tasks[0]
+            mock_memory.assert_awaited_once()
+            called_args, called_kwargs = mock_memory.await_args
+            self.assertIn("yesterday I moved", called_args[0])
+            self.assertIn(note, called_args[0])
+            self.assertIn("didn't move, just visited", called_args[0])
+            self.assertEqual(called_kwargs.get("reply_target"), update.effective_message)
+
+    async def test_chat_mode_voice_reply_to_memory_note_updates_chain_and_schedules_memory_update(self):
+        fake_bot = FakeRoastBot()
+        created_tasks = []
+        bot._chat_mode_chains[500] = [
+            {"role": "user", "content": "bought a car"},
+            {"role": "assistant", "content": "nice ride"},
+        ]
+        note = "🧠 Memory updated\nChronology:\n+ 2026-09-21 — bought a car"
+        bot._roast_chains["500:2001"] = [
+            {"role": "user", "content": "bought a car"},
+            {"role": "assistant", "content": note},
+        ]
+
+        class VoiceMessage:
+            chat_id = 500
+            message_id = 60
+            voice = SimpleNamespace(file_id="voice-reply-id")
+            reply_to_message = SimpleNamespace(message_id=2001)
+
+            def get_bot(self):
+                return fake_bot
+
+        update = SimpleNamespace(effective_message=VoiceMessage(), effective_chat=SimpleNamespace(id=500))
+        context = SimpleNamespace(
+            bot=fake_bot,
+            user_data={},
+            application=SimpleNamespace(create_task=lambda task, **kwargs: created_tasks.append(task)),
+        )
+
+        with patch.object(bot.state_store, "get_mode", return_value="chat"),                 patch.object(bot, "_transcribe_voice_file", new=AsyncMock(return_value="rented, not bought")),                 patch.object(bot, "_run_roast", new=AsyncMock()) as mock_roast,                 patch.object(bot, "_update_memory_and_chronology", new=AsyncMock()) as mock_memory:
+            await bot.handle_voice(update, context)
+
+            mock_roast.assert_awaited_once()
+            chain_passed = mock_roast.await_args[0][1]
+            self.assertEqual(chain_passed[2]["content"], note)
+            self.assertEqual(chain_passed[3]["content"], "rented, not bought")
+            self.assertEqual(bot._chat_mode_chains[500], chain_passed)
+
+            self.assertEqual(len(created_tasks), 1)
+            await created_tasks[0]
+            mock_memory.assert_awaited_once()
+            called_args, called_kwargs = mock_memory.await_args
+            self.assertIn("bought a car", called_args[0])
+            self.assertIn(note, called_args[0])
+            self.assertIn("rented, not bought", called_args[0])
+            self.assertEqual(called_kwargs.get("reply_target"), update.effective_message)
+
+    async def test_chat_mode_reply_to_roast_message_updates_chain_and_schedules_memory_update(self):
+        fake_bot = FakeRoastBot()
+        created_tasks = []
+        bot._chat_mode_chains[500] = [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "hey there"},
+        ]
+        bot._roast_chains["500:3001"] = [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "hey there"},
+        ]
+
+        class Message:
+            chat_id = 500
+            message_id = 70
+            text = "going to dentist tomorrow"
+            reply_to_message = SimpleNamespace(message_id=3001)
+
+            def get_bot(self):
+                return fake_bot
+
+        update = SimpleNamespace(effective_message=Message(), effective_chat=SimpleNamespace(id=500))
+        context = SimpleNamespace(
+            bot=fake_bot,
+            user_data={},
+            application=SimpleNamespace(create_task=lambda task, **kwargs: created_tasks.append(task)),
+        )
+
+        with patch.object(bot.state_store, "get_mode", return_value="chat"),                 patch.object(bot, "_run_roast", new=AsyncMock()) as mock_roast,                 patch.object(bot, "_update_memory_and_chronology", new=AsyncMock()) as mock_memory:
+            await bot.receive_edit_reply(update, context)
+
+            mock_roast.assert_awaited_once()
+            chain_passed = mock_roast.await_args[0][1]
+            self.assertEqual(chain_passed[-1]["content"], "going to dentist tomorrow")
+            self.assertEqual(bot._chat_mode_chains[500], chain_passed)
+
+            self.assertEqual(len(created_tasks), 1)
+            await created_tasks[0]
+            mock_memory.assert_awaited_once()
+            called_args, called_kwargs = mock_memory.await_args
+            self.assertEqual(called_args[0], "going to dentist tomorrow")
+            self.assertEqual(called_kwargs.get("reply_target"), update.effective_message)
+
+    async def test_diary_mode_reply_to_roast_message_does_not_schedule_memory_update(self):
+        fake_bot = FakeRoastBot()
+        created_tasks = []
+        bot._roast_chains["500:4001"] = [
+            {"role": "user", "content": "draft text"},
+            {"role": "assistant", "content": "roast text"},
+        ]
+
+        class Message:
+            chat_id = 500
+            message_id = 80
+            text = "just banter"
+            reply_to_message = SimpleNamespace(message_id=4001)
+
+            def get_bot(self):
+                return fake_bot
+
+        update = SimpleNamespace(effective_message=Message(), effective_chat=SimpleNamespace(id=500))
+        context = SimpleNamespace(
+            bot=fake_bot,
+            user_data={},
+            application=SimpleNamespace(create_task=lambda task, **kwargs: created_tasks.append(task)),
+        )
+
+        with patch.object(bot.state_store, "get_mode", return_value="diary"),                 patch.object(bot, "_run_roast", new=AsyncMock()) as mock_roast,                 patch.object(bot, "_update_memory_and_chronology", new=AsyncMock()) as mock_memory:
+            await bot.receive_edit_reply(update, context)
+
+            mock_roast.assert_awaited_once()
+            self.assertEqual(len(created_tasks), 0)
+            mock_memory.assert_not_called()
 
