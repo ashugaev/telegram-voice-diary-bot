@@ -10,8 +10,10 @@ returning an object with `.choices[0].message.content`.
 - For Anthropic (`AI_PROVIDER=anthropic`) it returns a thin shim that translates
   the same call shape onto the Anthropic Messages API and adapts the response
   back into an OpenAI-compatible object.
+- For OpenRouter (`AI_PROVIDER=openrouter`) it returns an OpenAI-compatible client
+  configured with OpenRouter's base URL and zero-data-retention provider routing.
 
-Audio transcription (Whisper) has no Anthropic equivalent and always stays on
+Audio transcription (Whisper) has no Anthropic or OpenRouter equivalent and always stays on
 OpenAI, regardless of the selected provider.
 """
 
@@ -31,6 +33,16 @@ _JSON_DIRECTIVE = "Верни СТРОГО валидный JSON-объект, �
 
 def create_chat_client():
     """Return an async chat client with a `.chat.completions.create(...)` API."""
+    if settings.ai_provider == "openrouter":
+        raw_client = openai.AsyncOpenAI(
+            base_url=settings.openrouter_base_url,
+            api_key=settings.openrouter_api_key,
+            default_headers={
+                "HTTP-Referer": "https://github.com/shugaev/diary-bot",
+                "X-Title": "diary-bot",
+            },
+        )
+        return _OpenRouterChatClient(raw_client)
     if settings.ai_provider == "anthropic":
         import anthropic
 
@@ -103,3 +115,39 @@ class _AnthropicCompletions:
         if wants_json:
             text = _strip_json_fences(text)
         return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=text))])
+
+
+class _OpenRouterChatClient:
+    """Adapts OpenAI client for OpenRouter with provider routing and output cleanup."""
+
+    def __init__(self, client):
+        self.chat = SimpleNamespace(completions=_OpenRouterCompletions(client))
+
+
+class _OpenRouterCompletions:
+    def __init__(self, client):
+        self._client = client
+
+    async def create(self, **kwargs):
+        provider_cfg = {
+            "data_collection": settings.openrouter_data_collection,
+            "allow_fallbacks": settings.openrouter_allow_fallbacks,
+        }
+        if settings.openrouter_provider_order:
+            order = [p.strip() for p in settings.openrouter_provider_order.split(",") if p.strip()]
+            if order:
+                provider_cfg["order"] = order
+
+        extra_body = dict(kwargs.get("extra_body") or {})
+        if "provider" not in extra_body:
+            extra_body["provider"] = provider_cfg
+        kwargs["extra_body"] = extra_body
+
+        response = await self._client.chat.completions.create(**kwargs)
+        wants_json = isinstance(kwargs.get("response_format"), dict) and kwargs["response_format"].get("type") == "json_object"
+        if wants_json and getattr(response, "choices", None):
+            first_choice = response.choices[0]
+            msg = getattr(first_choice, "message", None)
+            if msg and getattr(msg, "content", None):
+                msg.content = _strip_json_fences(msg.content)
+        return response

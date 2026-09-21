@@ -14,8 +14,9 @@ cp .env.example .env
 | `NOTION_DATABASE_ID` | ID from the database URL: `notion.so/workspace/{ID}?v=...` |
 | `ALLOWED_USER_ID` | Your Telegram user ID — from [@userinfobot](https://t.me/userinfobot) |
 | `TIMEZONE` | Your timezone, e.g. `Asia/Bangkok`, `Europe/Moscow` |
-| `AI_PROVIDER` | Optional. Chat provider for formatting/summaries/roast: `openai` (default) or `anthropic` |
+| `AI_PROVIDER` | Optional. Chat provider for formatting/summaries/roast: `openai` (default), `anthropic`, or `openrouter` |
 | `ANTHROPIC_API_KEY` | Required only when `AI_PROVIDER=anthropic` |
+| `OPENROUTER_API_KEY` | Required only when `AI_PROVIDER=openrouter` |
 | `DIARY_DAY_START_HOUR` | Optional. Hour the diary day starts in `TIMEZONE`, `0`-`23`; defaults to `0` |
 | `SILENT_NOTIFICATIONS` | Optional. Send messages without push notifications; defaults to `true` |
 | `ROAST_LANGUAGE` | Optional. Language the roast replies in; defaults to `Russian` |
@@ -36,17 +37,34 @@ All optional — sensible defaults are used when unset.
 | `ANTHROPIC_SUMMARY_MODEL` | Summaries (Anthropic mode) | `ANTHROPIC_FORMATTER_MODEL` |
 | `ANTHROPIC_PROFILE_MODEL` | Author profile (Anthropic mode) | `ANTHROPIC_SUMMARY_MODEL` |
 | `ANTHROPIC_ROAST_MODEL` | Roast (Anthropic mode) | `claude-opus-5` |
+| `OPENROUTER_BASE_URL` | Base URL for OpenRouter API | `https://openrouter.ai/api/v1` |
+| `OPENROUTER_FORMATTER_MODEL` | Formatting (OpenRouter mode) | `anthropic/claude-opus-5` |
+| `OPENROUTER_SUMMARY_MODEL` | Summaries (OpenRouter mode) | `OPENROUTER_FORMATTER_MODEL` |
+| `OPENROUTER_PROFILE_MODEL` | Author profile (OpenRouter mode) | `OPENROUTER_SUMMARY_MODEL` |
+| `OPENROUTER_ROAST_MODEL` | Roast (OpenRouter mode) | `anthropic/claude-opus-5` |
+| `OPENROUTER_PROVIDER_ORDER` | Preferred provider order | `Anthropic` |
+| `OPENROUTER_DATA_COLLECTION` | Data retention policy | `deny` |
+| `OPENROUTER_ALLOW_FALLBACKS` | Allow fallback providers | `false` |
 
 ## Switching AI provider
 
-Formatting, summaries, and the roast run through whichever provider `AI_PROVIDER` selects. To use Anthropic:
+Formatting, summaries, and the roast run through whichever provider `AI_PROVIDER` selects.
+
+To use Anthropic:
 
 ```bash
 AI_PROVIDER=anthropic
 ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-No code changes needed — restart the bot. Transcription always uses OpenAI Whisper, so `OPENAI_API_KEY` stays required in both modes.
+To use OpenRouter:
+
+```bash
+AI_PROVIDER=openrouter
+OPENROUTER_API_KEY=sk-or-v1-...
+```
+
+No code changes needed — restart the bot. Transcription always uses OpenAI Whisper, so `OPENAI_API_KEY` stays required in all modes.
 
 ## Notion setup
 
