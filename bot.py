@@ -110,6 +110,7 @@ _roast_chains: dict[str, list[dict]] = {}
 # Reset whenever switching into Diary mode or back.
 _chat_mode_chains: dict[int, list[dict]] = {}
 _chat_mode_locks: dict[int, asyncio.Lock] = {}
+_chat_mode_tails: dict[int, asyncio.Event] = {}
 CHAT_MODE_MAX_MESSAGES = 30
 CHAT_MODE_RETAIN_MESSAGES = 10
 
@@ -1258,6 +1259,7 @@ async def handle_diary_mode(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     language = _message_language(update=update)
     state_store.set_mode(chat_id, MODE_DIARY)
     _chat_mode_chains.pop(chat_id, None)
+    _chat_mode_tails.pop(chat_id, None)
     await update.effective_message.reply_text(
         t("mode.diary_enabled", language),
         reply_markup=_main_reply_keyboard(MODE_DIARY, language),
@@ -1269,6 +1271,7 @@ async def handle_chat_mode(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     language = _message_language(update=update)
     state_store.set_mode(chat_id, MODE_CHAT)
     _chat_mode_chains.pop(chat_id, None)
+    _chat_mode_tails.pop(chat_id, None)
     await update.effective_message.reply_text(
         t("mode.chat_enabled", language),
         reply_markup=_main_reply_keyboard(MODE_CHAT, language),
@@ -1403,12 +1406,30 @@ async def _handle_chat_mode_text(update: Update, context: ContextTypes.DEFAULT_T
         return
 
     chat_id = _message_chat_id(message)
-    status = await _reply_to_source(message, t("roast.thinking", language))
-    async with _get_chat_mode_lock(chat_id):
-        chain = await _prepare_chat_chain(chat_id, user_text, language=language)
-        await _run_roast(message, chain, context, status_message=status)
-        _chat_mode_chains[chat_id] = chain
-    context.application.create_task(_update_memory_and_chronology(user_text, message, language=language))
+    my_turn = asyncio.Event()
+    prev_turn = _chat_mode_tails.get(chat_id)
+    _chat_mode_tails[chat_id] = my_turn
+
+    status = None
+    try:
+        if prev_turn is not None and not prev_turn.is_set():
+            status = await _reply_to_source(message, t("roast.queued", language))
+            await prev_turn.wait()
+
+        if status is None:
+            status = await _reply_to_source(message, t("roast.thinking", language))
+        else:
+            await _edit_reply_message(context, status, t("roast.thinking", language))
+
+        async with _get_chat_mode_lock(chat_id):
+            chain = await _prepare_chat_chain(chat_id, user_text, language=language)
+            await _run_roast(message, chain, context, status_message=status)
+            _chat_mode_chains[chat_id] = chain
+        context.application.create_task(_update_memory_and_chronology(user_text, message, language=language))
+    finally:
+        my_turn.set()
+        if _chat_mode_tails.get(chat_id) is my_turn:
+            _chat_mode_tails.pop(chat_id, None)
 
 
 async def _handle_chat_mode_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1418,34 +1439,49 @@ async def _handle_chat_mode_voice(update: Update, context: ContextTypes.DEFAULT_
         await message.reply_text(t("roast.unavailable", language))
         return
 
-    status = await _reply_to_source(message, t("transcribing", language))
-    try:
-        user_text = await _transcribe_voice_file(context, message.voice.file_id)
-    except Exception as e:
-        logger.exception("Error transcribing chat voice message")
-        await _edit_reply_message(context, status, t("error", language, error=e))
-        return
-
-    if not user_text:
-        await _edit_reply_message(
-            context,
-            status,
-            t("speech.empty", language, model=settings.openai_transcription_model),
-        )
-        return
-
-    logger.info(
-        "Chat voice transcription with %s: %s",
-        settings.openai_transcription_model,
-        user_text,
-    )
     chat_id = _message_chat_id(message)
-    await _edit_reply_message(context, status, t("roast.thinking", language))
-    async with _get_chat_mode_lock(chat_id):
-        chain = await _prepare_chat_chain(chat_id, user_text, language=language)
-        await _run_roast(message, chain, context, status_message=status)
-        _chat_mode_chains[chat_id] = chain
-    context.application.create_task(_update_memory_and_chronology(user_text, message, language=language))
+    my_turn = asyncio.Event()
+    prev_turn = _chat_mode_tails.get(chat_id)
+    _chat_mode_tails[chat_id] = my_turn
+
+    status = None
+    try:
+        status = await _reply_to_source(message, t("transcribing", language))
+        try:
+            user_text = await _transcribe_voice_file(context, message.voice.file_id)
+        except Exception as e:
+            logger.exception("Error transcribing chat voice message")
+            await _edit_reply_message(context, status, t("error", language, error=e))
+            return
+
+        if not user_text:
+            await _edit_reply_message(
+                context,
+                status,
+                t("speech.empty", language, model=settings.openai_transcription_model),
+            )
+            return
+
+        logger.info(
+            "Chat voice transcription with %s: %s",
+            settings.openai_transcription_model,
+            user_text,
+        )
+
+        if prev_turn is not None and not prev_turn.is_set():
+            await _edit_reply_message(context, status, t("roast.queued", language))
+            await prev_turn.wait()
+
+        await _edit_reply_message(context, status, t("roast.thinking", language))
+        async with _get_chat_mode_lock(chat_id):
+            chain = await _prepare_chat_chain(chat_id, user_text, language=language)
+            await _run_roast(message, chain, context, status_message=status)
+            _chat_mode_chains[chat_id] = chain
+        context.application.create_task(_update_memory_and_chronology(user_text, message, language=language))
+    finally:
+        my_turn.set()
+        if _chat_mode_tails.get(chat_id) is my_turn:
+            _chat_mode_tails.pop(chat_id, None)
 
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
