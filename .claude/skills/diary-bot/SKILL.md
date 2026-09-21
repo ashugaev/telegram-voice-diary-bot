@@ -13,7 +13,7 @@ Use this as project memory for implementation and validation.
 |---|---|
 | Telegram update flow, drafts, callbacks, scheduling | `bot.py` |
 | Environment parsing and defaults | `config.py`, `.env.example` |
-| AI provider selection (OpenAI/Anthropic) for chat tasks | `services/ai.py`, `tests/test_anthropic_provider.py` |
+| AI provider selection (OpenAI/Anthropic/OpenRouter) for chat tasks | `services/ai.py`, `tests/test_anthropic_provider.py`, `tests/test_openrouter_provider.py` |
 | Chat formatting (provider-neutral) | `services/formatter.py`, `tests/test_openai_services.py` |
 | OpenAI transcription (always OpenAI, no Anthropic equivalent) | `services/whisper.py`, `tests/test_openai_services.py` |
 | Daily and weekly summaries (provider-neutral) | `services/summary.py`, `tests/test_openai_services.py` |

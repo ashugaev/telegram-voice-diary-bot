@@ -71,3 +71,28 @@ class ConfigValidationTests(unittest.TestCase):
         for raw in ("0", "false", "no", "off", "anything"):
             with patch.dict(os.environ, {"SILENT_NOTIFICATIONS": raw}, clear=True):
                 self.assertFalse(config._optional_bool("SILENT_NOTIFICATIONS", True))
+
+    def test_ai_provider_accepts_valid_providers(self):
+        for provider in ("openai", "anthropic", "openrouter", "OPENROUTER", " Anthropic "):
+            with self.subTest(provider=provider):
+                with patch.dict(os.environ, {"AI_PROVIDER": provider}, clear=True):
+                    self.assertEqual(config._ai_provider(), provider.strip().lower())
+
+    def test_ai_provider_defaults_to_openai(self):
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(config._ai_provider(), "openai")
+
+    def test_ai_provider_rejects_invalid_provider(self):
+        with patch.dict(os.environ, {"AI_PROVIDER": "cohere"}, clear=True):
+            with self.assertRaisesRegex(RuntimeError, "AI_PROVIDER must be 'openai', 'anthropic', or 'openrouter'"):
+                config._ai_provider()
+
+    def test_openrouter_api_key_required_only_when_openrouter_provider(self):
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(config._openrouter_api_key("openai"), "")
+            self.assertEqual(config._openrouter_api_key("anthropic"), "")
+            with self.assertRaisesRegex(RuntimeError, "OPENROUTER_API_KEY is required when AI_PROVIDER=openrouter"):
+                config._openrouter_api_key("openrouter")
+
+        with patch.dict(os.environ, {"OPENROUTER_API_KEY": "test-key"}, clear=True):
+            self.assertEqual(config._openrouter_api_key("openrouter"), "test-key")

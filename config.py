@@ -32,8 +32,8 @@ def _required_int(name: str) -> int:
 
 def _ai_provider() -> str:
     value = (os.getenv("AI_PROVIDER") or "openai").strip().lower() or "openai"
-    if value not in {"openai", "anthropic"}:
-        raise RuntimeError("AI_PROVIDER must be either 'openai' or 'anthropic'")
+    if value not in {"openai", "anthropic", "openrouter"}:
+        raise RuntimeError("AI_PROVIDER must be 'openai', 'anthropic', or 'openrouter'")
     return value
 
 
@@ -41,6 +41,13 @@ def _anthropic_api_key(provider: str) -> str:
     value = os.getenv("ANTHROPIC_API_KEY", "").strip()
     if provider == "anthropic" and not value:
         raise RuntimeError("ANTHROPIC_API_KEY is required when AI_PROVIDER=anthropic")
+    return value
+
+
+def _openrouter_api_key(provider: str) -> str:
+    value = os.getenv("OPENROUTER_API_KEY", "").strip()
+    if provider == "openrouter" and not value:
+        raise RuntimeError("OPENROUTER_API_KEY is required when AI_PROVIDER=openrouter")
     return value
 
 
@@ -72,6 +79,7 @@ class _Settings:
     ai_provider: str = _ai_provider()
     openai_api_key: str = _required_env("OPENAI_API_KEY")
     anthropic_api_key: str = _anthropic_api_key(ai_provider)
+    openrouter_api_key: str = _openrouter_api_key(ai_provider)
     openai_transcription_model: str = _optional_env("OPENAI_TRANSCRIPTION_MODEL", "whisper-1")
     openai_formatter_model: str = _optional_env("OPENAI_FORMATTER_MODEL", "gpt-6-astra")
     openai_summary_model: str = _optional_env("OPENAI_SUMMARY_MODEL", openai_formatter_model)
@@ -81,13 +89,34 @@ class _Settings:
     anthropic_summary_model: str = _optional_env("ANTHROPIC_SUMMARY_MODEL", anthropic_formatter_model)
     anthropic_profile_model: str = _optional_env("ANTHROPIC_PROFILE_MODEL", anthropic_summary_model)
     anthropic_roast_model: str = _optional_env("ANTHROPIC_ROAST_MODEL", "claude-opus-5")
+    openrouter_base_url: str = _optional_env("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+    openrouter_formatter_model: str = _optional_env("OPENROUTER_FORMATTER_MODEL", "anthropic/claude-opus-5")
+    openrouter_summary_model: str = _optional_env("OPENROUTER_SUMMARY_MODEL", openrouter_formatter_model)
+    openrouter_profile_model: str = _optional_env("OPENROUTER_PROFILE_MODEL", openrouter_summary_model)
+    openrouter_roast_model: str = _optional_env("OPENROUTER_ROAST_MODEL", "anthropic/claude-opus-5")
+    openrouter_provider_order: str = _optional_env("OPENROUTER_PROVIDER_ORDER", "Anthropic")
+    openrouter_data_collection: str = _optional_env("OPENROUTER_DATA_COLLECTION", "deny")
+    openrouter_allow_fallbacks: bool = _optional_bool("OPENROUTER_ALLOW_FALLBACKS", False)
     # Provider-neutral models the chat services actually use, resolved from the
     # active provider so switching AI_PROVIDER needs no code changes.
-    formatter_model: str = anthropic_formatter_model if ai_provider == "anthropic" else openai_formatter_model
-    summary_model: str = anthropic_summary_model if ai_provider == "anthropic" else openai_summary_model
-    profile_model: str = anthropic_profile_model if ai_provider == "anthropic" else openai_profile_model
-    roast_model: str = anthropic_roast_model if ai_provider == "anthropic" else openai_roast_model
-    ai_api_key: str = anthropic_api_key if ai_provider == "anthropic" else openai_api_key
+    if ai_provider == "openrouter":
+        formatter_model: str = openrouter_formatter_model
+        summary_model: str = openrouter_summary_model
+        profile_model: str = openrouter_profile_model
+        roast_model: str = openrouter_roast_model
+        ai_api_key: str = openrouter_api_key
+    elif ai_provider == "anthropic":
+        formatter_model: str = anthropic_formatter_model
+        summary_model: str = anthropic_summary_model
+        profile_model: str = anthropic_profile_model
+        roast_model: str = anthropic_roast_model
+        ai_api_key: str = anthropic_api_key
+    else:
+        formatter_model: str = openai_formatter_model
+        summary_model: str = openai_summary_model
+        profile_model: str = openai_profile_model
+        roast_model: str = openai_roast_model
+        ai_api_key: str = openai_api_key
     notion_token: str = _required_env("NOTION_TOKEN")
     notion_database_id: str = _required_env("NOTION_DATABASE_ID")
     allowed_user_id: int = _required_int("ALLOWED_USER_ID")
