@@ -2776,6 +2776,7 @@ class ChatModeFlowTests(unittest.IsolatedAsyncioTestCase):
 
         bot._chat_mode_chains.clear()
         bot._chat_mode_locks.clear()
+        bot._chat_mode_tails.clear()
 
         async def slow_roast(target, chain, context, status_message=None):
             msg_text = chain[-1]["content"]
@@ -2801,6 +2802,229 @@ class ChatModeFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(bot._chat_mode_chains[200]), 2)
         self.assertEqual(bot._chat_mode_chains[200][0]["content"], "first")
         self.assertEqual(bot._chat_mode_chains[200][1]["content"], "second")
+
+    async def test_chat_mode_voice_queues_and_updates_status_while_previous_is_processing(self):
+        fake_bot = FakeRoastBot()
+        execution_order = []
+        bot._chat_mode_chains.clear()
+        bot._chat_mode_locks.clear()
+        bot._chat_mode_tails.clear()
+
+        class VoiceMessage:
+            def __init__(self, message_id, file_id):
+                self.chat_id = 200
+                self.message_id = message_id
+                self.voice = SimpleNamespace(file_id=file_id)
+
+            def get_bot(self):
+                return fake_bot
+
+        async def fake_transcribe(context, file_id):
+            if file_id == "v1":
+                await asyncio.sleep(0.01)
+                return "voice one"
+            elif file_id == "v2":
+                await asyncio.sleep(0.02)
+                return "voice two"
+            return "voice"
+
+        async def slow_roast(target, chain, context, status_message=None):
+            msg_text = chain[-1]["content"]
+            execution_order.append(f"start {msg_text}")
+            await asyncio.sleep(0.05)
+            execution_order.append(f"end {msg_text}")
+
+        context = SimpleNamespace(
+            bot=fake_bot,
+            application=SimpleNamespace(create_task=lambda task, **kwargs: None),
+        )
+
+        with patch.object(bot.state_store, "get_mode", return_value="chat"), \
+                patch.object(bot, "_transcribe_voice_file", new=fake_transcribe), \
+                patch.object(bot, "_run_roast", new=slow_roast):
+            task1 = asyncio.create_task(bot.handle_voice(SimpleNamespace(effective_message=VoiceMessage(1, "v1")), context))
+            task2 = asyncio.create_task(bot.handle_voice(SimpleNamespace(effective_message=VoiceMessage(2, "v2")), context))
+            await asyncio.gather(task1, task2)
+
+        self.assertEqual(
+            execution_order,
+            ["start voice one", "end voice one", "start voice two", "end voice two"],
+        )
+        edited_texts = [edit["text"] for edit in fake_bot.edits]
+        self.assertIn("⏳ In queue...", edited_texts)
+        self.assertIn("🔥 Thinking...", edited_texts)
+        self.assertEqual(bot._chat_mode_chains[200][0]["content"], "voice one")
+        self.assertEqual(bot._chat_mode_chains[200][1]["content"], "voice two")
+
+    async def test_chat_mode_voice_preserves_order_when_second_transcribes_faster(self):
+        fake_bot = FakeRoastBot()
+        execution_order = []
+        bot._chat_mode_chains.clear()
+        bot._chat_mode_locks.clear()
+        bot._chat_mode_tails.clear()
+
+        class VoiceMessage:
+            def __init__(self, message_id, file_id):
+                self.chat_id = 200
+                self.message_id = message_id
+                self.voice = SimpleNamespace(file_id=file_id)
+
+            def get_bot(self):
+                return fake_bot
+
+        async def fake_transcribe(context, file_id):
+            if file_id == "v1":
+                await asyncio.sleep(0.05)
+                return "first voice"
+            elif file_id == "v2":
+                await asyncio.sleep(0.01)
+                return "second voice"
+            return "voice"
+
+        async def slow_roast(target, chain, context, status_message=None):
+            msg_text = chain[-1]["content"]
+            execution_order.append(f"start {msg_text}")
+            await asyncio.sleep(0.02)
+            execution_order.append(f"end {msg_text}")
+
+        context = SimpleNamespace(
+            bot=fake_bot,
+            application=SimpleNamespace(create_task=lambda task, **kwargs: None),
+        )
+
+        with patch.object(bot.state_store, "get_mode", return_value="chat"), \
+                patch.object(bot, "_transcribe_voice_file", new=fake_transcribe), \
+                patch.object(bot, "_run_roast", new=slow_roast):
+            task1 = asyncio.create_task(bot.handle_voice(SimpleNamespace(effective_message=VoiceMessage(1, "v1")), context))
+            task2 = asyncio.create_task(bot.handle_voice(SimpleNamespace(effective_message=VoiceMessage(2, "v2")), context))
+            await asyncio.gather(task1, task2)
+
+        self.assertEqual(
+            execution_order,
+            ["start first voice", "end first voice", "start second voice", "end second voice"],
+        )
+        self.assertEqual(bot._chat_mode_chains[200][0]["content"], "first voice")
+        self.assertEqual(bot._chat_mode_chains[200][1]["content"], "second voice")
+
+    async def test_chat_mode_voice_unblocks_if_previous_transcription_fails(self):
+        fake_bot = FakeRoastBot()
+        execution_order = []
+        bot._chat_mode_chains.clear()
+        bot._chat_mode_locks.clear()
+        bot._chat_mode_tails.clear()
+
+        class VoiceMessage:
+            def __init__(self, message_id, file_id):
+                self.chat_id = 200
+                self.message_id = message_id
+                self.voice = SimpleNamespace(file_id=file_id)
+
+            def get_bot(self):
+                return fake_bot
+
+        async def fake_transcribe(context, file_id):
+            if file_id == "v1":
+                raise RuntimeError("whisper failed")
+            return "second voice"
+
+        async def fake_roast(target, chain, context, status_message=None):
+            msg_text = chain[-1]["content"]
+            execution_order.append(msg_text)
+
+        context = SimpleNamespace(
+            bot=fake_bot,
+            application=SimpleNamespace(create_task=lambda task, **kwargs: None),
+        )
+
+        with patch.object(bot.state_store, "get_mode", return_value="chat"), \
+                patch.object(bot, "_transcribe_voice_file", new=fake_transcribe), \
+                patch.object(bot, "_run_roast", new=fake_roast):
+            task1 = asyncio.create_task(bot.handle_voice(SimpleNamespace(effective_message=VoiceMessage(1, "v1")), context))
+            task2 = asyncio.create_task(bot.handle_voice(SimpleNamespace(effective_message=VoiceMessage(2, "v2")), context))
+            await asyncio.gather(task1, task2)
+
+        self.assertEqual(execution_order, ["second voice"])
+        self.assertEqual(len(bot._chat_mode_chains[200]), 1)
+        self.assertEqual(bot._chat_mode_chains[200][0]["content"], "second voice")
+
+    async def test_chat_mode_text_shows_queued_status_when_waiting_for_voice(self):
+        fake_bot = FakeRoastBot()
+        bot._chat_mode_chains.clear()
+        bot._chat_mode_locks.clear()
+        bot._chat_mode_tails.clear()
+
+        class VoiceMessage:
+            def __init__(self):
+                self.chat_id = 200
+                self.message_id = 1
+                self.voice = SimpleNamespace(file_id="v1")
+
+            def get_bot(self):
+                return fake_bot
+
+        class TextMessage:
+            def __init__(self):
+                self.chat_id = 200
+                self.message_id = 2
+                self.text = "text message"
+
+            def get_bot(self):
+                return fake_bot
+
+        async def slow_roast(target, chain, context, status_message=None):
+            await asyncio.sleep(0.04)
+
+        context = SimpleNamespace(
+            bot=fake_bot,
+            application=SimpleNamespace(create_task=lambda task, **kwargs: None),
+        )
+
+        with patch.object(bot.state_store, "get_mode", return_value="chat"), \
+                patch.object(bot, "_transcribe_voice_file", new=AsyncMock(return_value="voice msg")), \
+                patch.object(bot, "_run_roast", new=slow_roast):
+            task1 = asyncio.create_task(bot.handle_voice(SimpleNamespace(effective_message=VoiceMessage()), context))
+            await asyncio.sleep(0.01)
+            task2 = asyncio.create_task(bot.handle_text(SimpleNamespace(effective_message=TextMessage()), context))
+            await asyncio.gather(task1, task2)
+
+        sent_texts = [s["text"] for s in fake_bot.sent]
+        self.assertIn("⏳ In queue...", sent_texts)
+
+    async def test_chat_mode_voice_russian_language_statuses(self):
+        fake_bot = FakeRoastBot()
+        bot._chat_mode_chains.clear()
+        bot._chat_mode_locks.clear()
+        bot._chat_mode_tails.clear()
+
+        class VoiceMessage:
+            def __init__(self, message_id, file_id):
+                self.chat_id = 200
+                self.message_id = message_id
+                self.voice = SimpleNamespace(file_id=file_id)
+
+            def get_bot(self):
+                return fake_bot
+
+        async def slow_roast(target, chain, context, status_message=None):
+            await asyncio.sleep(0.04)
+
+        context = SimpleNamespace(
+            bot=fake_bot,
+            application=SimpleNamespace(create_task=lambda task, **kwargs: None),
+        )
+
+        with patch.object(bot.state_store, "get_mode", return_value="chat"), \
+                patch.object(bot.state_store, "get_saved_language", return_value="ru"), \
+                patch.object(bot, "_transcribe_voice_file", new=AsyncMock(return_value="голос")), \
+                patch.object(bot, "_run_roast", new=slow_roast):
+            task1 = asyncio.create_task(bot.handle_voice(SimpleNamespace(effective_message=VoiceMessage(1, "v1")), context))
+            await asyncio.sleep(0.01)
+            task2 = asyncio.create_task(bot.handle_voice(SimpleNamespace(effective_message=VoiceMessage(2, "v2")), context))
+            await asyncio.gather(task1, task2)
+
+        edited_texts = [edit["text"] for edit in fake_bot.edits]
+        self.assertIn("⏳ В очереди...", edited_texts)
+        self.assertIn("🔥 Думаю...", edited_texts)
 
 
 

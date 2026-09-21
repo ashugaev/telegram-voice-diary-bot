@@ -400,6 +400,10 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en": "Roast failed: {error}",
         "ru": "Разъёб упал: {error}",
     },
+    "roast.queued": {
+        "en": "⏳ In queue...",
+        "ru": "⏳ В очереди...",
+    },
     "roast.status": {
         "en": "🔥 Roasting...",
         "ru": "🔥 Разбираю...",
