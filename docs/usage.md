@@ -23,14 +23,13 @@ Date: Today (YYYY-MM-DD)
 
 Daily sport health
 
-[ ✎ Title ]  [ ✎ Text ]  [ ✎ Tags ]
 [        Date: Today (YYYY-MM-DD)        ]
 [            🔥 Roast             ]
 [            ✓ Save              ]
 [            Cancel              ]
 ```
 
-- **✎ Title / Text / Tags** — prompt you for a new value; the preview updates in place.
+- **Editing via reply** — reply to the preview message with text or voice instructions to adjust title, text, or tags (e.g. _"change title to X and add tag work"_).
 - **Date** — opens a 7-day picker. **Back to preview** keeps the date; **Cancel draft** discards.
 - **Cancel** — discards the draft without saving.
 
@@ -108,8 +107,8 @@ The pass is built to be dull and safe:
 
 The `Daily` tag is always added. Additional tags can be:
 
-- **Extracted by the formatter** — mention them naturally: _"went for a run today. Tags: sport, health"_.
-- **Edited manually** — click **✎ Tags** and send them comma-separated: `sport, health, work`.
+- **Extracted by the formatter** — mention them naturally or define standing behavior rules (e.g. in `/rules` or roast).
+- **Edited via reply** — reply to the preview message with instructions like `add tag sport` or `change tags to work, health`.
 
 ## Summaries
 
