@@ -88,9 +88,6 @@ class PreviewRenderingTests(unittest.TestCase):
         self.assertEqual(
             callback_data,
             [
-                "edit_title:entry-1",
-                "edit_text:entry-1",
-                "edit_tags:entry-1",
                 "pick_date:entry-1",
                 "roast:entry-1",
                 "save:entry-1",
@@ -333,7 +330,7 @@ class CreatePreviewTests(unittest.IsolatedAsyncioTestCase):
             )
 
         entry_date = bot._default_entry_date()
-        fake_formatter.assert_awaited_once_with("raw transcription", language="en")
+        fake_formatter.assert_awaited_once_with("raw transcription", language="en", rules=[])
         self.assertEqual(len(fake_context.bot.edits), 1)
         edit = fake_context.bot.edits[0]
         self.assertEqual(edit["chat_id"], 123)
@@ -374,7 +371,7 @@ class CreatePreviewTests(unittest.IsolatedAsyncioTestCase):
         ):
             await bot._create_preview(source_message, fake_context, "plain text")
 
-        fake_formatter.assert_awaited_once_with("plain text", language="en")
+        fake_formatter.assert_awaited_once_with("plain text", language="en", rules=[])
         self.assertEqual(len(fake_context.bot.sent_messages), 1)
         reply_parameters = fake_context.bot.sent_messages[0]["reply_parameters"]
         self.assertEqual(reply_parameters.message_id, 10)
@@ -729,6 +726,121 @@ class FormatDraftFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(draft["text"], "Manually edited text")
         self.assertEqual(draft["raw_text"], "Raw model text")
         self.assertEqual(fake_state_store.saved_drafts[-1]["raw_text"], "Raw model text")
+
+    async def test_reply_to_draft_preview_updates_draft_via_ai(self):
+        draft = {
+            "id": "entry-1",
+            "title": "Old Title",
+            "text": "Old text",
+            "raw_text": "Original speech",
+            "tags": ["work"],
+            "chat_id": 123,
+            "preview_msg_id": 20,
+            "entry_date": bot._default_entry_date(),
+            "metadata": {},
+        }
+        user_msg = SimpleNamespace(
+            text="поправь тайтл на Встреча и добавь тег важные",
+            reply_to_message=SimpleNamespace(message_id=20),
+            message_id=60,
+        )
+        update = SimpleNamespace(
+            effective_message=user_msg,
+            effective_chat=SimpleNamespace(id=123),
+        )
+        fake_bot = FakeEditBot()
+        context = SimpleNamespace(
+            bot=fake_bot,
+            user_data={bot.DRAFTS_KEY: {"entry-1": draft}},
+        )
+        fake_state_store = FakeStateStore()
+        fake_state_store.rules = [SimpleNamespace(id="r1", text="always keep concise")]
+
+        async def fake_edit_entry_draft(**kwargs):
+            self.assertEqual(kwargs["instruction"], "поправь тайтл на Встреча и добавь тег важные")
+            self.assertEqual(kwargs["current_title"], "Old Title")
+            self.assertEqual(kwargs["current_tags"], ["work"])
+            self.assertEqual(kwargs["rules"], fake_state_store.rules)
+            return "Встреча", "Old text", ["work", "важные"]
+
+        with patch.object(bot, "state_store", fake_state_store), \
+                patch.object(bot, "edit_entry_draft", new=fake_edit_entry_draft):
+            await bot.receive_edit_reply(update, context)
+
+        self.assertEqual(draft["title"], "Встреча")
+        self.assertEqual(draft["tags"], ["work", "важные"])
+        self.assertIn(60, draft.get("thread_msg_ids", []))
+        self.assertEqual(fake_state_store.saved_drafts[-1]["title"], "Встреча")
+        self.assertTrue(len(fake_bot.edits) > 0)
+        self.assertIn("Встреча", fake_bot.edits[-1]["text"])
+
+    async def test_voice_reply_to_draft_preview_transcribes_and_updates_draft(self):
+        draft = {
+            "id": "entry-1",
+            "title": "Title",
+            "text": "Text",
+            "raw_text": "Raw",
+            "tags": ["work"],
+            "chat_id": 123,
+            "preview_msg_id": 20,
+            "entry_date": bot._default_entry_date(),
+            "metadata": {},
+        }
+        voice = SimpleNamespace(file_id="voice-file-id")
+        fake_bot = FakeRoastBot()
+        user_msg = SimpleNamespace(
+            voice=voice,
+            reply_to_message=SimpleNamespace(message_id=20),
+            message_id=61,
+            chat_id=123,
+            get_bot=lambda: fake_bot,
+            reply_text=AsyncMock(return_value=SimpleNamespace(message_id=99)),
+        )
+        update = SimpleNamespace(
+            effective_message=user_msg,
+            effective_chat=SimpleNamespace(id=123),
+        )
+        context = SimpleNamespace(
+            bot=fake_bot,
+            user_data={bot.DRAFTS_KEY: {"entry-1": draft}},
+        )
+        fake_state_store = FakeStateStore()
+
+        async def fake_edit_entry_draft(**kwargs):
+            self.assertEqual(kwargs["instruction"], "добавь тег sport")
+            return "Title", "Text", ["work", "sport"]
+
+        with patch.object(bot, "state_store", fake_state_store), \
+                patch.object(bot, "_transcribe_voice_file", new=AsyncMock(return_value="добавь тег sport")), \
+                patch.object(bot, "edit_entry_draft", new=fake_edit_entry_draft):
+            await bot.handle_voice(update, context)
+
+        self.assertEqual(draft["tags"], ["work", "sport"])
+        self.assertEqual(fake_state_store.saved_drafts[-1]["tags"], ["work", "sport"])
+
+    async def test_create_preview_passes_stored_rules_to_format_entry(self):
+        fake_state_store = FakeStateStore()
+        fake_state_store.rules = [SimpleNamespace(id="r1", text="always add tag work")]
+        fake_context = SimpleNamespace(
+            bot=FakeSendBot(),
+            user_data={},
+            application=FakeApplication(close_coroutines=True),
+        )
+        source_message = SimpleNamespace(
+            chat_id=123,
+            message_id=10,
+            get_bot=lambda: fake_context.bot,
+        )
+        fake_formatter = AsyncMock(return_value=("Title", "Body", ["work"]))
+        with (
+            patch.object(bot, "format_entry", new=fake_formatter),
+            patch.object(bot, "_new_entry_id", return_value="entry-3"),
+            patch.object(bot, "state_store", fake_state_store),
+            patch.object(bot, "_update_memory_and_chronology", new=AsyncMock()),
+        ):
+            await bot._create_preview(source_message, fake_context, "voice note")
+
+        fake_formatter.assert_awaited_once_with("voice note", language="en", rules=fake_state_store.rules)
 
 
 class DatePickerFlowTests(unittest.IsolatedAsyncioTestCase):
@@ -1351,6 +1463,12 @@ class FakeStateStore:
     def remove_draft(self, entry_id):
         self.removed_drafts.append(entry_id)
 
+    def get_rules(self):
+        return getattr(self, "rules", [])
+
+    def set_rules(self, rules):
+        self.rules = list(rules)
+
     def get_mode(self, chat_id):
         return bot.MODE_DIARY
 
@@ -1381,6 +1499,9 @@ class FakeRoastBot:
             message_id=kwargs["message_id"],
             get_bot=lambda: self,
         )
+
+    async def delete_message(self, chat_id, message_id):
+        pass
 
 
 class MemoryNoteTests(unittest.TestCase):

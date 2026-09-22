@@ -24,6 +24,7 @@ from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
 )
+from telegram.constants import ChatAction
 from telegram.ext import (
     Application,
     ApplicationBuilder,
@@ -38,7 +39,7 @@ from telegram.ext import (
 from config import settings
 from services import memory, notion_memory, profile_rebuild, roast
 from services.diary_dates import diary_today
-from services.formatter import format_entry
+from services.formatter import edit_entry_draft, format_entry
 from services.i18n import (
     DEFAULT_LANGUAGE,
     LANGUAGE_NAMES,
@@ -582,6 +583,28 @@ def _get_draft(context: ContextTypes.DEFAULT_TYPE, entry_id: str) -> dict[str, A
     return draft
 
 
+def _find_draft_by_reply(context: ContextTypes.DEFAULT_TYPE, chat_id: int, reply_to_message_id: int) -> dict[str, Any] | None:
+    for entry_id, draft in list(_drafts(context).items()):
+        if draft.get("chat_id") == chat_id:
+            if (
+                _preview_msg_id(draft) == reply_to_message_id
+                or draft.get("metadata", {}).get("telegram_message_id") == reply_to_message_id
+                or reply_to_message_id in draft.get("thread_msg_ids", [])
+            ):
+                return draft
+    stored_drafts = getattr(state_store, "data", {}).get("drafts", {})
+    for entry_id, draft in list(stored_drafts.items()):
+        if draft.get("chat_id") == chat_id:
+            if (
+                _preview_msg_id(draft) == reply_to_message_id
+                or draft.get("metadata", {}).get("telegram_message_id") == reply_to_message_id
+                or reply_to_message_id in draft.get("thread_msg_ids", [])
+            ):
+                _drafts(context)[entry_id] = draft
+                return draft
+    return None
+
+
 def _preview_keyboard(
     entry_id: str,
     entry_date: str | None = None,
@@ -598,13 +621,6 @@ def _preview_keyboard(
             InlineKeyboardButton("←", callback_data=f"preview_page:{entry_id}:{previous_page}"),
             InlineKeyboardButton("→", callback_data=f"preview_page:{entry_id}:{next_page}"),
         ])
-    rows.append(
-        [
-            InlineKeyboardButton(t("button.title", language), callback_data=f"edit_title:{entry_id}"),
-            InlineKeyboardButton(t("button.text", language), callback_data=f"edit_text:{entry_id}"),
-            InlineKeyboardButton(t("button.tags", language), callback_data=f"edit_tags:{entry_id}"),
-        ],
-    )
     rows.append([
         InlineKeyboardButton(
             t("button.date", language, date=_entry_date_label(entry_date, language)),
@@ -1419,11 +1435,17 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
 
     reply_to = getattr(message, "reply_to_message", None)
-    if reply_to and _memory_prompts(context).pop(
-        _prompt_key(_message_chat_id(message), reply_to.message_id), None
-    ):
-        await _receive_memory_focus_voice(update, context)
-        return
+    if reply_to:
+        if _memory_prompts(context).pop(
+            _prompt_key(_message_chat_id(message), reply_to.message_id), None
+        ):
+            await _receive_memory_focus_voice(update, context)
+            return
+
+        draft = _find_draft_by_reply(context, _message_chat_id(message), reply_to.message_id)
+        if draft:
+            await _handle_draft_voice_reply(update, context, draft)
+            return
 
     chat_id = _message_chat_id(message)
     if state_store.get_mode(chat_id) == MODE_CHAT:
@@ -1723,10 +1745,14 @@ async def _create_preview(
     entry_date = _default_entry_date()
     record = state_store.get_message(message_key) if message_key else None
     lang = normalize_language(language or (record.get("language") if record else _message_language(message)))
+    rules = state_store.get_rules() if hasattr(state_store, "get_rules") else []
     try:
-        title, formatted_text, tags = await format_entry(source_text, language=lang)
+        title, formatted_text, tags = await format_entry(source_text, language=lang, rules=rules)
     except TypeError:
-        title, formatted_text, tags = await format_entry(source_text)
+        try:
+            title, formatted_text, tags = await format_entry(source_text, language=lang)
+        except TypeError:
+            title, formatted_text, tags = await format_entry(source_text)
     text = formatted_text or source_text
 
     preview = _render_preview(title, text, tags, entry_date, language=lang)
@@ -1827,8 +1853,6 @@ async def entry_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await _edit_preview(context, draft)
     elif action == "set_date":
         await _set_entry_date(update, context, draft)
-    elif action in {"edit_title", "edit_text", "edit_tags"}:
-        await _request_edit(query, context, entry_id, action.removeprefix("edit_"), language)
 
 
 async def duplicate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2029,20 +2053,76 @@ async def _set_entry_date(update: Update, context: ContextTypes.DEFAULT_TYPE, dr
     await _edit_preview(context, draft)
 
 
-async def _request_edit(query, context: ContextTypes.DEFAULT_TYPE, entry_id: str, field: str, language: str | None = None) -> None:
-    labels = {
-        "title": t("edit.title", language),
-        "text": t("edit.text", language),
-        "tags": t("edit.tags", language),
-    }
-    prompt = await query.message.reply_text(
-        labels[field],
-        reply_markup=ForceReply(selective=True),
-    )
-    _edit_prompts(context)[_prompt_key(query.message.chat_id, prompt.message_id)] = {
-        "entry_id": entry_id,
-        "field": field,
-    }
+async def _apply_draft_reply_edit(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    draft: dict[str, Any],
+    instruction: str,
+) -> None:
+    user_msg = update.effective_message
+    language = draft.get("language") or _message_language(user_msg, update)
+    instruction_text = (instruction or "").strip()
+    if not instruction_text:
+        return
+
+    if draft.get("saving"):
+        await user_msg.reply_text(t("draft.saving", language))
+        return
+
+    rules = state_store.get_rules() if hasattr(state_store, "get_rules") else []
+    with suppress(Exception):
+        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
+    try:
+        new_title, new_text, new_tags = await edit_entry_draft(
+            instruction=instruction_text,
+            current_title=draft.get("title", ""),
+            current_text=draft.get("text", ""),
+            current_tags=draft.get("tags", []),
+            raw_text=draft.get("raw_text", ""),
+            language=language,
+            rules=rules,
+        )
+    except Exception as e:
+        logger.exception("Error adjusting draft via reply")
+        await user_msg.reply_text(t("error", language, error=e))
+        return
+
+    draft["title"] = new_title
+    draft["text"] = new_text
+    draft["tags"] = new_tags
+    draft["preview_page"] = 0
+    if getattr(user_msg, "message_id", None):
+        draft.setdefault("thread_msg_ids", []).append(user_msg.message_id)
+    state_store.save_draft(draft)
+    await _edit_preview(context, draft)
+
+
+async def _handle_draft_voice_reply(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    draft: dict[str, Any],
+) -> None:
+    user_msg = update.effective_message
+    language = draft.get("language") or _message_language(user_msg, update)
+    status = await _reply_to_source(user_msg, t("transcribing", language))
+    try:
+        instruction = await _transcribe_voice_file(context, user_msg.voice.file_id)
+    except Exception as e:
+        logger.exception("Error transcribing voice draft reply")
+        await _edit_reply_message(context, status, t("error", language, error=e))
+        return
+
+    if not instruction:
+        await _edit_reply_message(
+            context,
+            status,
+            t("speech.empty", language, model=settings.openai_transcription_model),
+        )
+        return
+
+    with suppress(Exception):
+        await context.bot.delete_message(update.effective_chat.id, status.message_id)
+    await _apply_draft_reply_edit(update, context, draft, instruction)
 
 
 async def receive_edit_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2062,6 +2142,10 @@ async def receive_edit_reply(update: Update, context: ContextTypes.DEFAULT_TYPE)
         roast_chain = _roast_chains.get(_roast_chain_key(chat_id, prompt_id))
         if roast_chain is not None:
             await _handle_roast_followup(update, context, roast_chain)
+            return
+        draft = _find_draft_by_reply(context, chat_id, prompt_id)
+        if draft:
+            await _apply_draft_reply_edit(update, context, draft, user_msg.text or "")
             return
         await handle_text(update, context)
         return
@@ -2444,7 +2528,7 @@ def main() -> None:
     app.add_handler(
         CallbackQueryHandler(
             entry_callback,
-            pattern="^(save|save_anyway|roast|cancel|preview_page|pick_date|set_date|back_to_preview|edit_title|edit_text|edit_tags):",
+            pattern="^(save|save_anyway|roast|cancel|preview_page|pick_date|set_date|back_to_preview):",
         )
     )
 

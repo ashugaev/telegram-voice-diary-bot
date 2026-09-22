@@ -50,6 +50,65 @@ class FormatterTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result, ("raw transcription text", "raw transcription text", []))
 
+    async def test_format_entry_injects_rules_into_prompt(self):
+        fake_client = FakeChatClient('{"title":"Work Meeting","text":"Met with team","tags":["work"]}')
+
+        with patch.object(formatter, "client", fake_client):
+            result = await formatter.format_entry(
+                "Met with team",
+                rules=["always add tag work", "short title"],
+            )
+
+        self.assertEqual(result, ("Work Meeting", "Met with team", ["work"]))
+        content = fake_client.chat.completions.calls[0]["messages"][0]["content"]
+        self.assertIn("Правила автора:", content)
+        self.assertIn("always add tag work", content)
+        self.assertIn("short title", content)
+
+    async def test_edit_entry_draft_updates_title_text_and_tags(self):
+        fake_client = FakeChatClient('{"title":"New Title","text":"Updated text","tags":["work","important"]}')
+
+        with patch.object(formatter, "client", fake_client):
+            result = await formatter.edit_entry_draft(
+                instruction="change title and add important tag",
+                current_title="Old Title",
+                current_text="Old text",
+                current_tags=["work"],
+                raw_text="Raw speech",
+                rules=["keep formatting clean"],
+            )
+
+        self.assertEqual(result, ("New Title", "Updated text", ["work", "important"]))
+        call = fake_client.chat.completions.calls[0]
+        self.assertIn("Правила автора:", call["messages"][0]["content"])
+        self.assertIn("keep formatting clean", call["messages"][0]["content"])
+        self.assertIn("Old Title", call["messages"][1]["content"])
+        self.assertIn("change title and add important tag", call["messages"][1]["content"])
+
+    async def test_edit_entry_draft_preserves_current_values_on_partial_or_invalid_json(self):
+        fake_client = FakeChatClient('{"title":"Only New Title"}')
+
+        with patch.object(formatter, "client", fake_client):
+            result = await formatter.edit_entry_draft(
+                instruction="change title only",
+                current_title="Old Title",
+                current_text="Old text",
+                current_tags=["work"],
+            )
+
+        self.assertEqual(result, ("Only New Title", "Old text", ["work"]))
+
+        broken_client = FakeChatClient('invalid json{')
+        with patch.object(formatter, "client", broken_client):
+            fallback_result = await formatter.edit_entry_draft(
+                instruction="break json",
+                current_title="Old Title",
+                current_text="Old text",
+                current_tags=["work"],
+            )
+
+        self.assertEqual(fallback_result, ("Old Title", "Old text", ["work"]))
+
 
 class WhisperTests(unittest.IsolatedAsyncioTestCase):
     async def test_transcribe_uses_configured_model_and_russian_language(self):
