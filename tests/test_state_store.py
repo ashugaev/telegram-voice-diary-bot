@@ -120,7 +120,7 @@ class StateStoreTests(unittest.TestCase):
 
             self.assertEqual(store.get_chronology(), [])
 
-    def test_multimodel_votes_persist_and_move_between_models(self):
+    def test_multimodel_vote_persists_and_cannot_repeat(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "state.json"
             store = StateStore(path)
@@ -133,6 +133,7 @@ class StateStoreTests(unittest.TestCase):
                 [{"role": "user", "content": "entry"}],
                 memory_context={"points": []},
             )
+            self.assertIsNone(store.vote_multimodel(123, 10, 1))
             store.register_multimodel_option(
                 123,
                 11,
@@ -146,8 +147,8 @@ class StateStoreTests(unittest.TestCase):
             moved = store.vote_multimodel(123, 11, 1)
 
             self.assertEqual(first["votes"], {"1": "anthropic/claude-opus-5"})
-            self.assertEqual(moved["votes"], {"1": "x-ai/grok-4.7"})
-            self.assertEqual(store.get_multimodel_model_votes(), {"x-ai/grok-4.7": 1})
+            self.assertIsNone(moved)
+            self.assertEqual(store.get_multimodel_model_votes(), {"anthropic/claude-opus-5": 1})
             self.assertEqual(
                 StateStore(path).get_multimodel_session(session_id)["options"]["x-ai/grok-4.7"]["text"],
                 "alt",

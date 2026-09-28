@@ -766,12 +766,13 @@ def _store_roast_chain(chat_id: int, message_id: int, messages: list[dict]) -> N
     _roast_chains[_roast_chain_key(chat_id, message_id)] = [dict(message) for message in messages]
 
 
-def _roast_action_keyboard(language: str | None = None) -> InlineKeyboardMarkup | None:
+def _roast_action_keyboard(language: str | None = None, *, voting: bool = False) -> InlineKeyboardMarkup | None:
     if not roast.is_multimodel_configured():
         return None
+    button = "button.vote" if voting else "button.multimodel"
+    callback = "vote" if voting else "multimodel"
     return InlineKeyboardMarkup([[
-        InlineKeyboardButton(t("button.multimodel", language), callback_data="multimodel"),
-        InlineKeyboardButton(t("button.vote", language), callback_data="vote"),
+        InlineKeyboardButton(t(button, language), callback_data=callback),
     ]])
 
 
@@ -866,7 +867,7 @@ async def _deliver_roast(
     delivered message id to the full chain so the user can reply to continue it."""
     chunks = _split_message(chain[-1]["content"])
     sent_messages = []
-    reply_markup = _roast_action_keyboard(language)
+    reply_markup = _roast_action_keyboard(language, voting=session_id is not None)
     for index, chunk in enumerate(chunks):
         if index == 0 and status_message is not None:
             kwargs = {"reply_markup": reply_markup} if reply_markup is not None else {}
@@ -1262,6 +1263,16 @@ async def multimodel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
             memory_context=context_data,
             language=language,
         )
+    if len(state_store.get_multimodel_session(session_id)["options"]) > 1:
+        for chat_id, message_id in state_store.get_multimodel_session_messages(session_id):
+            try:
+                await context.bot.edit_message_reply_markup(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    reply_markup=_roast_action_keyboard(language, voting=True),
+                )
+            except Exception:
+                logger.exception("Could not update multimodel vote keyboard")
 
 
 async def vote_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1275,6 +1286,12 @@ async def vote_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await query.message.reply_text(t("multimodel.vote_gone", language))
         return
     await query.message.reply_text(_multimodel_stats_text(session, language))
+    stored = state_store.get_multimodel_message(_message_chat_id(query.message), query.message.message_id)
+    for chat_id, message_id in state_store.get_multimodel_session_messages(stored["session_id"]):
+        try:
+            await context.bot.edit_message_reply_markup(chat_id=chat_id, message_id=message_id, reply_markup=None)
+        except Exception:
+            logger.exception("Could not remove multimodel vote keyboard")
 
 
 def _is_memory_note_text(text: str) -> bool:

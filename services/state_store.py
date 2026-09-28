@@ -396,23 +396,25 @@ class StateStore:
         session = self.data.setdefault("multimodel", {}).setdefault("sessions", {}).get(session_id)
         return deepcopy(session) if session else None
 
+    def get_multimodel_session_messages(self, session_id: str) -> list[tuple[int, int]]:
+        messages = self.data.setdefault("multimodel", {}).setdefault("messages", {})
+        return [tuple(map(int, key.split(":", 1))) for key, value in messages.items()
+                if value.get("session_id") == session_id]
+
     def vote_multimodel(self, chat_id: int, message_id: int, user_id: int | str) -> dict[str, Any] | None:
         section = self.data.setdefault("multimodel", {})
         message = section.setdefault("messages", {}).get(self.message_key(chat_id, message_id))
         if not message:
             return None
         session = section.setdefault("sessions", {}).get(message.get("session_id"))
-        if not session:
+        if not session or len(session.get("options", {})) < 2:
             return None
         model = message["model"]
         voter = str(user_id)
-        previous = session.setdefault("votes", {}).get(voter)
-        if previous == model:
-            return deepcopy(session)
+        if voter in session.setdefault("votes", {}):
+            return None
         session["votes"][voter] = model
         model_votes = section.setdefault("model_votes", {})
-        if previous:
-            model_votes[previous] = max(0, int(model_votes.get(previous, 0)) - 1)
         model_votes[model] = int(model_votes.get(model, 0)) + 1
         session["updated_at"] = _now()
         self._save()
