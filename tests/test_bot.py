@@ -1329,8 +1329,9 @@ class MultimodelRoastTests(unittest.IsolatedAsyncioTestCase):
             markup = fake_bot.sent[0]["reply_markup"]
             self.assertEqual(markup.inline_keyboard[0][0].callback_data, "multimodel")
             self.assertEqual(len(markup.inline_keyboard[0]), 1)
-            self.assertEqual(bot._roast_action_keyboard("ru").inline_keyboard[0][0].text, "Мульти")
-            self.assertEqual(bot._roast_action_keyboard("ru", voting=True).inline_keyboard[0][0].text, "Голосовать")
+            with patch.object(roast, "is_multimodel_configured", return_value=True):
+                self.assertEqual(bot._roast_action_keyboard("ru").inline_keyboard[0][0].text, "Мульти")
+                self.assertEqual(bot._roast_action_keyboard("ru", voting=True).inline_keyboard[0][0].text, "Голосовать")
             self.assertEqual(
                 store.get_multimodel_message(123, 1001)["model"],
                 "anthropic/claude-opus-5",
