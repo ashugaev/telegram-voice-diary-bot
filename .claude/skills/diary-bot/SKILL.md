@@ -27,6 +27,8 @@ Use this as project memory for implementation and validation.
 
 ## Behavior invariants
 
+- Localize every user-facing button and message through `services/i18n.py`; add English and Russian strings together.
+
 - Preview formatted text by default; Original button restores raw transcription or typed text.
 - Formatter-generated title and tags apply before save.
 - `Daily` tag is always present in rendered and saved entries.

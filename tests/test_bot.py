@@ -1328,7 +1328,10 @@ class MultimodelRoastTests(unittest.IsolatedAsyncioTestCase):
 
             markup = fake_bot.sent[0]["reply_markup"]
             self.assertEqual(markup.inline_keyboard[0][0].callback_data, "multimodel")
-            self.assertEqual(markup.inline_keyboard[0][1].callback_data, "vote")
+            self.assertEqual(len(markup.inline_keyboard[0]), 1)
+            with patch.object(roast, "is_multimodel_configured", return_value=True):
+                self.assertEqual(bot._roast_action_keyboard("ru").inline_keyboard[0][0].text, "Мульти")
+                self.assertEqual(bot._roast_action_keyboard("ru", voting=True).inline_keyboard[0][0].text, "Голосовать")
             self.assertEqual(
                 store.get_multimodel_message(123, 1001)["model"],
                 "anthropic/claude-opus-5",
@@ -1369,6 +1372,9 @@ class MultimodelRoastTests(unittest.IsolatedAsyncioTestCase):
 
             session = store.get_multimodel_session(session_id)
             self.assertEqual(session["options"]["x-ai/grok-4.7"]["text"], "grok-4.7\n\noriginal prompt answer")
+            self.assertEqual({edit["message_id"] for edit in fake_bot.markup_edits}, {20, 1002})
+            self.assertTrue(all(edit["reply_markup"].inline_keyboard[0][0].callback_data == "vote"
+                                for edit in fake_bot.markup_edits))
 
     async def test_vote_callback_records_vote_and_prints_stats(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1380,6 +1386,10 @@ class MultimodelRoastTests(unittest.IsolatedAsyncioTestCase):
                 "answer",
                 [{"role": "user", "content": "entry"}],
             )
+            store.register_multimodel_option(
+                123, 21, "anthropic/claude-opus-5", "other answer",
+                [{"role": "user", "content": "entry"}], session_id=session_id,
+            )
             fake_message = SimpleNamespace(chat_id=123, message_id=20, reply_text=AsyncMock())
             query = SimpleNamespace(
                 message=fake_message,
@@ -1388,14 +1398,37 @@ class MultimodelRoastTests(unittest.IsolatedAsyncioTestCase):
             )
             update = SimpleNamespace(callback_query=query, effective_user=query.from_user)
 
+            fake_bot = FakeRoastBot()
             with patch.object(bot, "state_store", store):
-                await bot.vote_callback(update, SimpleNamespace())
+                await bot.vote_callback(update, SimpleNamespace(bot=fake_bot))
+                text = fake_message.reply_text.await_args.args[0]
+                await bot.vote_callback(update, SimpleNamespace(bot=fake_bot))
 
             session = store.get_multimodel_session(session_id)
             self.assertEqual(session["votes"], {"7": "x-ai/grok-4.7"})
-            text = fake_message.reply_text.await_args.args[0]
             self.assertIn("Vote saved.", text)
             self.assertIn("grok-4.7: 1", text)
+            self.assertEqual(len(fake_bot.markup_edits), 2)
+            self.assertTrue(all(edit["reply_markup"] is None for edit in fake_bot.markup_edits))
+            self.assertIn("already voted", fake_message.reply_text.await_args.args[0])
+
+    async def test_multimodel_failure_keeps_multi_action(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = StateStore(Path(tmpdir) / "state.json")
+            store.register_multimodel_option(
+                123, 20, "anthropic/claude-opus-5", "main",
+                [{"role": "user", "content": "entry"}],
+            )
+            fake_bot = FakeRoastBot()
+            message = SimpleNamespace(chat_id=123, message_id=20, get_bot=lambda: fake_bot)
+            update = SimpleNamespace(callback_query=SimpleNamespace(message=message, answer=AsyncMock()))
+            with patch.object(bot, "state_store", store), \
+                    patch.object(bot.settings, "openrouter_roast_models", ["x-ai/grok-4.7"]), \
+                    patch.object(roast, "is_multimodel_configured", return_value=True), \
+                    patch.object(roast, "roast_with_openrouter_model", new=AsyncMock(side_effect=RuntimeError("failed"))), \
+                    patch.object(bot.logger, "exception"):
+                await bot.multimodel_callback(update, SimpleNamespace(bot=fake_bot))
+            self.assertEqual(fake_bot.markup_edits, [])
 
 
 class FakeSendBot:
@@ -1604,6 +1637,7 @@ class FakeRoastBot:
     def __init__(self):
         self.sent = []
         self.edits = []
+        self.markup_edits = []
         self.username = "diary_bot"
         self._counter = 1000
 
@@ -1623,6 +1657,9 @@ class FakeRoastBot:
             message_id=kwargs["message_id"],
             get_bot=lambda: self,
         )
+
+    async def edit_message_reply_markup(self, **kwargs):
+        self.markup_edits.append(kwargs)
 
     async def delete_message(self, chat_id, message_id):
         pass

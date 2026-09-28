@@ -66,7 +66,7 @@ MESSAGES: dict[str, dict[str, str]] = {
     },
     "button.multimodel": {
         "en": "Multi",
-        "ru": "Multi",
+        "ru": "Мульти",
     },
     "button.original": {
         "en": "↺ Original",
@@ -106,7 +106,7 @@ MESSAGES: dict[str, dict[str, str]] = {
     },
     "button.vote": {
         "en": "Vote",
-        "ru": "Vote",
+        "ru": "Голосовать",
     },
     "cancelled": {
         "en": "Cancelled.",
@@ -250,39 +250,39 @@ MESSAGES: dict[str, dict[str, str]] = {
     },
     "multimodel.done": {
         "en": "Multi-model roast done.",
-        "ru": "Multi-model roast done.",
+        "ru": "Ответы других моделей готовы.",
     },
     "multimodel.global_stats": {
         "en": "All votes:",
-        "ru": "All votes:",
+        "ru": "Все голоса:",
     },
     "multimodel.gone": {
         "en": "This roast thread is no longer available.",
-        "ru": "This roast thread is no longer available.",
+        "ru": "Эта беседа больше недоступна.",
     },
     "multimodel.model_failed": {
         "en": "{model} failed: {error}",
-        "ru": "{model} failed: {error}",
+        "ru": "Ошибка модели {model}: {error}",
     },
     "multimodel.session_stats": {
         "en": "This roast:",
-        "ru": "This roast:",
+        "ru": "В этом сравнении:",
     },
     "multimodel.status": {
         "en": "Calling other models...",
-        "ru": "Calling other models...",
+        "ru": "Вызываю другие модели...",
     },
     "multimodel.unavailable": {
         "en": "Multi-model roast is unavailable.",
-        "ru": "Multi-model roast is unavailable.",
+        "ru": "Другие модели недоступны.",
     },
     "multimodel.vote_gone": {
-        "en": "This answer is no longer available for voting.",
-        "ru": "This answer is no longer available for voting.",
+        "en": "Voting is unavailable or you already voted in this comparison.",
+        "ru": "Голосование недоступно или вы уже голосовали в этом сравнении.",
     },
     "multimodel.vote_saved": {
         "en": "Vote saved.",
-        "ru": "Vote saved.",
+        "ru": "Голос сохранён.",
     },
     "memory.about": {
         "en": "About you",
