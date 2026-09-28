@@ -1,5 +1,6 @@
 import json
 import os
+import uuid
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
@@ -41,6 +42,7 @@ class StateStore:
                 "profile": {"points": [], "notion_mirror": []},
                 "rules": {"items": [], "notion_mirror": []},
                 "chronology": {"items": [], "notion_mirror": []},
+                "multimodel": {"messages": {}, "sessions": {}, "model_votes": {}},
             }
         with self.path.open("r", encoding="utf-8") as f:
             data = json.load(f)
@@ -57,6 +59,10 @@ class StateStore:
         data.setdefault("chronology", {})
         data["chronology"].setdefault("items", [])
         data["chronology"].setdefault("notion_mirror", [])
+        data.setdefault("multimodel", {})
+        data["multimodel"].setdefault("messages", {})
+        data["multimodel"].setdefault("sessions", {})
+        data["multimodel"].setdefault("model_votes", {})
         data.setdefault("settings", {})
         if data["settings"].get("language"):
             data["settings"]["language"] = normalize_language(data["settings"].get("language"))
@@ -339,6 +345,82 @@ class StateStore:
     def remove_draft(self, entry_id: str) -> None:
         self.data["drafts"].pop(entry_id, None)
         self._save()
+
+    def register_multimodel_option(
+        self,
+        chat_id: int,
+        message_id: int,
+        model: str,
+        text: str,
+        prompt_chain: list[dict],
+        session_id: str | None = None,
+        memory_context: dict[str, Any] | None = None,
+    ) -> str:
+        section = self.data.setdefault("multimodel", {})
+        messages = section.setdefault("messages", {})
+        sessions = section.setdefault("sessions", {})
+        session_id = session_id or uuid.uuid4().hex[:12]
+        session = sessions.setdefault(session_id, {
+            "id": session_id,
+            "prompt_chain": deepcopy(prompt_chain),
+            "memory_context": deepcopy(memory_context or {}),
+            "options": {},
+            "votes": {},
+            "created_at": _now(),
+        })
+        session["prompt_chain"] = deepcopy(prompt_chain)
+        if memory_context is not None:
+            session["memory_context"] = deepcopy(memory_context)
+        session.setdefault("options", {})[model] = {
+            "model": model,
+            "text": text,
+            "updated_at": _now(),
+        }
+        session.setdefault("votes", {})
+        session["updated_at"] = _now()
+        messages[self.message_key(chat_id, message_id)] = {
+            "session_id": session_id,
+            "model": model,
+            "updated_at": _now(),
+        }
+        self._save()
+        return session_id
+
+    def get_multimodel_message(self, chat_id: int, message_id: int) -> dict[str, Any] | None:
+        message = self.data.setdefault("multimodel", {}).setdefault("messages", {}).get(
+            self.message_key(chat_id, message_id)
+        )
+        return deepcopy(message) if message else None
+
+    def get_multimodel_session(self, session_id: str) -> dict[str, Any] | None:
+        session = self.data.setdefault("multimodel", {}).setdefault("sessions", {}).get(session_id)
+        return deepcopy(session) if session else None
+
+    def vote_multimodel(self, chat_id: int, message_id: int, user_id: int | str) -> dict[str, Any] | None:
+        section = self.data.setdefault("multimodel", {})
+        message = section.setdefault("messages", {}).get(self.message_key(chat_id, message_id))
+        if not message:
+            return None
+        session = section.setdefault("sessions", {}).get(message.get("session_id"))
+        if not session:
+            return None
+        model = message["model"]
+        voter = str(user_id)
+        previous = session.setdefault("votes", {}).get(voter)
+        if previous == model:
+            return deepcopy(session)
+        session["votes"][voter] = model
+        model_votes = section.setdefault("model_votes", {})
+        if previous:
+            model_votes[previous] = max(0, int(model_votes.get(previous, 0)) - 1)
+        model_votes[model] = int(model_votes.get(model, 0)) + 1
+        session["updated_at"] = _now()
+        self._save()
+        return deepcopy(session)
+
+    def get_multimodel_model_votes(self) -> dict[str, int]:
+        votes = self.data.setdefault("multimodel", {}).setdefault("model_votes", {})
+        return {str(model): int(count) for model, count in votes.items() if int(count) > 0}
 
 
 state_store = StateStore()

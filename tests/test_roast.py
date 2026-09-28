@@ -71,7 +71,52 @@ class RoastServiceTests(unittest.IsolatedAsyncioTestCase):
             f"{roast.DEFAULT_SYSTEM_PROMPT}\n\nСегодня: {diary_today().isoformat()}"
             f"\n\n{roast.RULES_PROTOCOL_PROMPT}",
         )
+
+    async def test_openrouter_multimodel_roast_uses_requested_model_without_provider_order(self):
+        fake = FakeOpenAI(_chat_response("Alt roast."))
+        chain = [{"role": "user", "content": "entry"}]
+
+        with patch.object(roast.settings, "openrouter_api_key", "key"), \
+                patch.object(roast.settings, "openrouter_data_collection", "deny"), \
+                patch.object(roast.settings, "openrouter_allow_fallbacks", False), \
+                patch.object(roast, "create_openrouter_chat_client", return_value=fake):
+            result = await roast.roast_with_openrouter_model(
+                chain,
+                "x-ai/grok-4.7",
+                points=_items("likes precise feedback"),
+                rules=_items("be blunt"),
+                chronology=_items("2026-09-27 — shipped a feature"),
+                language="en",
+            )
+
+        self.assertEqual(result, roast.RoastReply("Alt roast.", None))
+        kwargs = fake.chat.completions.calls[0]
+        self.assertEqual(kwargs["model"], "x-ai/grok-4.7")
+        self.assertEqual(kwargs["extra_body"]["provider"], {
+            "data_collection": "deny",
+            "allow_fallbacks": False,
+        })
+        self.assertNotIn("order", kwargs["extra_body"]["provider"])
+        self.assertIn("likes precise feedback", kwargs["messages"][0]["content"])
         self.assertEqual(kwargs["messages"][1:], chain)
+
+    async def test_openrouter_multimodel_roast_uses_exact_stored_system_prompt(self):
+        fake = FakeOpenAI(_chat_response("Alt roast."))
+
+        with patch.object(roast.settings, "openrouter_api_key", "key"), \
+                patch.object(roast, "create_openrouter_chat_client", return_value=fake):
+            await roast.roast_with_openrouter_model(
+                [{"role": "user", "content": "entry"}],
+                "x-ai/grok-4.7",
+                points=_items("newer fact must not leak"),
+                system_prompt_text="original system prompt snapshot",
+            )
+
+        kwargs = fake.chat.completions.calls[0]
+        self.assertEqual(kwargs["messages"][0], {
+            "role": "system",
+            "content": "original system prompt snapshot",
+        })
 
     async def test_roast_honors_env_system_prompt_override(self):
         fake = FakeOpenAI(_chat_response("ok"))

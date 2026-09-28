@@ -64,6 +64,10 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en": "Mark as Highlight ⭐",
         "ru": "Отметить хайлайтом ⭐",
     },
+    "button.multimodel": {
+        "en": "Multi",
+        "ru": "Multi",
+    },
     "button.original": {
         "en": "↺ Original",
         "ru": "↺ Оригинал",
@@ -99,6 +103,10 @@ MESSAGES: dict[str, dict[str, str]] = {
     "button.to_diary": {
         "en": "📖 Switch to Diary",
         "ru": "📖 Включить дневник",
+    },
+    "button.vote": {
+        "en": "Vote",
+        "ru": "Vote",
     },
     "cancelled": {
         "en": "Cancelled.",
@@ -239,6 +247,42 @@ MESSAGES: dict[str, dict[str, str]] = {
     "mode.chat_enabled": {
         "en": "🔥 Chat mode enabled. Messages continue the conversation with your roast buddy and are not saved to Notion. Memory updates normally.",
         "ru": "🔥 Режим пиздежа включен. Сообщения идут в постоянный диалог с коучем и не сохраняются в Notion. Память обновляется штатно.",
+    },
+    "multimodel.done": {
+        "en": "Multi-model roast done.",
+        "ru": "Multi-model roast done.",
+    },
+    "multimodel.global_stats": {
+        "en": "All votes:",
+        "ru": "All votes:",
+    },
+    "multimodel.gone": {
+        "en": "This roast thread is no longer available.",
+        "ru": "This roast thread is no longer available.",
+    },
+    "multimodel.model_failed": {
+        "en": "{model} failed: {error}",
+        "ru": "{model} failed: {error}",
+    },
+    "multimodel.session_stats": {
+        "en": "This roast:",
+        "ru": "This roast:",
+    },
+    "multimodel.status": {
+        "en": "Calling other models...",
+        "ru": "Calling other models...",
+    },
+    "multimodel.unavailable": {
+        "en": "Multi-model roast is unavailable.",
+        "ru": "Multi-model roast is unavailable.",
+    },
+    "multimodel.vote_gone": {
+        "en": "This answer is no longer available for voting.",
+        "ru": "This answer is no longer available for voting.",
+    },
+    "multimodel.vote_saved": {
+        "en": "Vote saved.",
+        "ru": "Vote saved.",
     },
     "memory.about": {
         "en": "About you",

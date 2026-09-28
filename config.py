@@ -15,6 +15,11 @@ def _optional_bool(name: str, default: bool) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _optional_csv(name: str, default: str = "") -> list[str]:
+    value = os.getenv(name, default)
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
 def _required_env(name: str) -> str:
     value = os.getenv(name)
     if value is None or not value.strip():
@@ -94,6 +99,7 @@ class _Settings:
     openrouter_summary_model: str = _optional_env("OPENROUTER_SUMMARY_MODEL", openrouter_formatter_model)
     openrouter_profile_model: str = _optional_env("OPENROUTER_PROFILE_MODEL", openrouter_summary_model)
     openrouter_roast_model: str = _optional_env("OPENROUTER_ROAST_MODEL", "anthropic/claude-opus-5")
+    openrouter_roast_models: list[str] = _optional_csv("OPENROUTER_ROAST_MODELS")
     openrouter_provider_order: str = _optional_env("OPENROUTER_PROVIDER_ORDER", "Anthropic")
     openrouter_data_collection: str = _optional_env("OPENROUTER_DATA_COLLECTION", "deny")
     openrouter_allow_fallbacks: bool = _optional_bool("OPENROUTER_ALLOW_FALLBACKS", False)

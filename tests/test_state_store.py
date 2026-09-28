@@ -119,6 +119,39 @@ class StateStoreTests(unittest.TestCase):
             store = StateStore(path)
 
             self.assertEqual(store.get_chronology(), [])
+
+    def test_multimodel_votes_persist_and_move_between_models(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "state.json"
+            store = StateStore(path)
+
+            session_id = store.register_multimodel_option(
+                123,
+                10,
+                "anthropic/claude-opus-5",
+                "main",
+                [{"role": "user", "content": "entry"}],
+                memory_context={"points": []},
+            )
+            store.register_multimodel_option(
+                123,
+                11,
+                "x-ai/grok-4.7",
+                "alt",
+                [{"role": "user", "content": "entry"}],
+                session_id=session_id,
+            )
+
+            first = store.vote_multimodel(123, 10, 1)
+            moved = store.vote_multimodel(123, 11, 1)
+
+            self.assertEqual(first["votes"], {"1": "anthropic/claude-opus-5"})
+            self.assertEqual(moved["votes"], {"1": "x-ai/grok-4.7"})
+            self.assertEqual(store.get_multimodel_model_votes(), {"x-ai/grok-4.7": 1})
+            self.assertEqual(
+                StateStore(path).get_multimodel_session(session_id)["options"]["x-ai/grok-4.7"]["text"],
+                "alt",
+            )
             self.assertEqual(store.get_notion_mirror(CHRONOLOGY_SECTION), [])
 
     def test_language_persists_and_legacy_state_has_no_saved_language(self):
@@ -254,4 +287,3 @@ class StateStoreTests(unittest.TestCase):
             store.set_mode(123, "diary")
             self.assertEqual(store.get_mode(123), "diary")
             self.assertEqual(StateStore(path).get_mode(123), "diary")
-

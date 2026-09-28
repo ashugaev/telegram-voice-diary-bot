@@ -42,6 +42,7 @@ All optional — sensible defaults are used when unset.
 | `OPENROUTER_SUMMARY_MODEL` | Summaries (OpenRouter mode) | `OPENROUTER_FORMATTER_MODEL` |
 | `OPENROUTER_PROFILE_MODEL` | Author profile (OpenRouter mode) | `OPENROUTER_SUMMARY_MODEL` |
 | `OPENROUTER_ROAST_MODEL` | Roast (OpenRouter mode) | `anthropic/claude-opus-5` |
+| `OPENROUTER_ROAST_MODELS` | Optional comma-separated OpenRouter models for the roast Multi button | empty |
 | `OPENROUTER_PROVIDER_ORDER` | Preferred provider order | `Anthropic` |
 | `OPENROUTER_DATA_COLLECTION` | Data retention policy | `deny` |
 | `OPENROUTER_ALLOW_FALLBACKS` | Allow fallback providers | `false` |
@@ -49,6 +50,8 @@ All optional — sensible defaults are used when unset.
 ## Switching AI provider
 
 Formatting, summaries, and the roast run through whichever provider `AI_PROVIDER` selects.
+
+`OPENROUTER_ROAST_MODELS` is separate from the main roast model. When it is empty, no extra roast buttons are shown. When set, every roast reply gets **Multi** and **Vote** buttons. **Multi** asks each listed OpenRouter model for the same prompt snapshot and posts its answer. **Vote** records which model's answer you preferred and shows per-answer plus all-time model vote counts.
 
 To use Anthropic:
 
