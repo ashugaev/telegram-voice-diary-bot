@@ -34,20 +34,24 @@ _JSON_DIRECTIVE = "Верни СТРОГО валидный JSON-объект, �
 def create_chat_client():
     """Return an async chat client with a `.chat.completions.create(...)` API."""
     if settings.ai_provider == "openrouter":
-        raw_client = openai.AsyncOpenAI(
-            base_url=settings.openrouter_base_url,
-            api_key=settings.openrouter_api_key,
-            default_headers={
-                "HTTP-Referer": "https://github.com/shugaev/diary-bot",
-                "X-Title": "diary-bot",
-            },
-        )
-        return _OpenRouterChatClient(raw_client)
+        return create_openrouter_chat_client()
     if settings.ai_provider == "anthropic":
         import anthropic
 
         return _AnthropicChatClient(anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key))
     return openai.AsyncOpenAI(api_key=settings.openai_api_key)
+
+
+def create_openrouter_chat_client():
+    raw_client = openai.AsyncOpenAI(
+        base_url=settings.openrouter_base_url,
+        api_key=settings.openrouter_api_key,
+        default_headers={
+            "HTTP-Referer": "https://github.com/shugaev/diary-bot",
+            "X-Title": "diary-bot",
+        },
+    )
+    return _OpenRouterChatClient(raw_client)
 
 
 def _extract_text(response) -> str:

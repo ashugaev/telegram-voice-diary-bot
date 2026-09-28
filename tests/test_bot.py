@@ -1,7 +1,9 @@
 import asyncio
 import os
+import tempfile
 import unittest
 from datetime import date
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -15,6 +17,7 @@ os.environ.setdefault("ALLOWED_USER_ID", "1")
 
 import bot
 from services import roast
+from services.state_store import StateStore
 
 
 class ApplicationSetupTests(unittest.TestCase):
@@ -1272,6 +1275,127 @@ class PostInitTests(unittest.IsolatedAsyncioTestCase):
             await bot.post_init(application)
 
         self.assertEqual(replayed, [application])
+
+
+class MultimodelRoastTests(unittest.IsolatedAsyncioTestCase):
+    async def test_delivered_roast_does_not_register_vote_state_when_multimodel_is_off(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = StateStore(Path(tmpdir) / "state.json")
+            fake_bot = FakeRoastBot()
+            target = SimpleNamespace(chat_id=123, message_id=10, get_bot=lambda: fake_bot)
+            chain = [
+                {"role": "user", "content": "entry"},
+                {"role": "assistant", "content": "main roast"},
+            ]
+
+            with patch.object(bot, "state_store", store), \
+                    patch.object(roast, "is_multimodel_configured", return_value=False):
+                await bot._deliver_roast(
+                    target,
+                    chain,
+                    SimpleNamespace(bot=fake_bot),
+                    model="anthropic/claude-opus-5",
+                    prompt_chain=chain[:-1],
+                    memory_context={"system_prompt": "snapshot"},
+                    language="en",
+                )
+
+            self.assertNotIn("reply_markup", fake_bot.sent[0])
+            self.assertIsNone(store.get_multimodel_message(123, 1001))
+
+    async def test_delivered_roast_gets_multimodel_keyboard_and_vote_mapping(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = StateStore(Path(tmpdir) / "state.json")
+            fake_bot = FakeRoastBot()
+            target = SimpleNamespace(chat_id=123, message_id=10, get_bot=lambda: fake_bot)
+            context = SimpleNamespace(bot=fake_bot)
+            chain = [
+                {"role": "user", "content": "entry"},
+                {"role": "assistant", "content": "main roast"},
+            ]
+
+            with patch.object(bot, "state_store", store), \
+                    patch.object(roast, "is_multimodel_configured", return_value=True):
+                await bot._deliver_roast(
+                    target,
+                    chain,
+                    context,
+                    model="anthropic/claude-opus-5",
+                    prompt_chain=chain[:-1],
+                    memory_context={"points": []},
+                    language="en",
+                )
+
+            markup = fake_bot.sent[0]["reply_markup"]
+            self.assertEqual(markup.inline_keyboard[0][0].callback_data, "multimodel")
+            self.assertEqual(markup.inline_keyboard[0][1].callback_data, "vote")
+            self.assertEqual(
+                store.get_multimodel_message(123, 1001)["model"],
+                "anthropic/claude-opus-5",
+            )
+
+    async def test_multimodel_callback_uses_stored_system_prompt_snapshot(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = StateStore(Path(tmpdir) / "state.json")
+            session_id = store.register_multimodel_option(
+                123,
+                20,
+                "anthropic/claude-opus-5",
+                "main",
+                [{"role": "user", "content": "entry"}],
+                memory_context={"system_prompt": "original prompt", "points": []},
+            )
+            fake_bot = FakeRoastBot()
+            fake_message = SimpleNamespace(
+                chat_id=123,
+                message_id=20,
+                reply_text=AsyncMock(),
+                get_bot=lambda: fake_bot,
+            )
+            query = SimpleNamespace(
+                message=fake_message,
+                answer=AsyncMock(),
+            )
+            update = SimpleNamespace(callback_query=query)
+
+            async def fake_roast(*args, **kwargs):
+                return roast.RoastReply(f"{kwargs['system_prompt_text']} answer", None)
+
+            with patch.object(bot, "state_store", store), \
+                    patch.object(bot.settings, "openrouter_roast_models", ["x-ai/grok-4.7"]), \
+                    patch.object(roast, "is_multimodel_configured", return_value=True), \
+                    patch.object(roast, "roast_with_openrouter_model", new=fake_roast):
+                await bot.multimodel_callback(update, SimpleNamespace(bot=fake_bot))
+
+            session = store.get_multimodel_session(session_id)
+            self.assertEqual(session["options"]["x-ai/grok-4.7"]["text"], "grok-4.7\n\noriginal prompt answer")
+
+    async def test_vote_callback_records_vote_and_prints_stats(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = StateStore(Path(tmpdir) / "state.json")
+            session_id = store.register_multimodel_option(
+                123,
+                20,
+                "x-ai/grok-4.7",
+                "answer",
+                [{"role": "user", "content": "entry"}],
+            )
+            fake_message = SimpleNamespace(chat_id=123, message_id=20, reply_text=AsyncMock())
+            query = SimpleNamespace(
+                message=fake_message,
+                from_user=SimpleNamespace(id=7),
+                answer=AsyncMock(),
+            )
+            update = SimpleNamespace(callback_query=query, effective_user=query.from_user)
+
+            with patch.object(bot, "state_store", store):
+                await bot.vote_callback(update, SimpleNamespace())
+
+            session = store.get_multimodel_session(session_id)
+            self.assertEqual(session["votes"], {"7": "x-ai/grok-4.7"})
+            text = fake_message.reply_text.await_args.args[0]
+            self.assertIn("Vote saved.", text)
+            self.assertIn("grok-4.7: 1", text)
 
 
 class FakeSendBot:
@@ -3354,4 +3478,3 @@ class ChatModeFlowTests(unittest.IsolatedAsyncioTestCase):
             mock_roast.assert_awaited_once()
             self.assertEqual(len(created_tasks), 0)
             mock_memory.assert_not_called()
-

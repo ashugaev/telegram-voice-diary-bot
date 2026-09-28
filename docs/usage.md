@@ -50,6 +50,8 @@ Reply to any roast message to keep the thread going; the bot sends the whole pri
 
 The button is available whenever the active AI provider's API key is set (see [Configuration](configuration.md)). The persona is built in but can be replaced with `ROAST_SYSTEM_PROMPT`; set `ROAST_LANGUAGE` to force a reply language regardless of the entry's language.
 
+When `OPENROUTER_ROAST_MODELS` is set, roast replies also get **Multi** and **Vote** buttons. **Multi** sends the same prompt snapshot to the configured OpenRouter models and posts their answers under the original roast. **Vote** marks the answer you preferred and shows the vote table for that prompt plus the all-time model totals. Votes persist in local state across restarts.
+
 ### Behavior rules — `/rules`
 
 Separate from the profile, the bot keeps a short list of **behavior rules** — standing instructions on how it should act ("stop asking questions", "swear less", "be blunter about money"). They are injected at the end of the roast system prompt and **outrank the persona**: on conflict, the rules win.

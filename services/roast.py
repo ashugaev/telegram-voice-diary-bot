@@ -4,7 +4,7 @@ from typing import NamedTuple
 
 from config import settings
 from services import memory
-from services.ai import create_chat_client
+from services.ai import create_chat_client, create_openrouter_chat_client
 from services.diary_dates import diary_today
 from services.i18n import ai_language, normalize_language
 from services.memory import MemoryItem
@@ -421,6 +421,10 @@ def is_configured() -> bool:
     return bool(settings.ai_api_key)
 
 
+def is_multimodel_configured() -> bool:
+    return bool(settings.openrouter_api_key and settings.openrouter_roast_models)
+
+
 def system_prompt(
     points: list[MemoryItem] | None = None,
     rules: list[MemoryItem] | None = None,
@@ -502,6 +506,7 @@ async def roast(
     rules: list[MemoryItem] | None = None,
     chronology: list[MemoryItem] | None = None,
     language: str | None = None,
+    system_prompt_text: str | None = None,
 ) -> RoastReply:
     if not is_configured():
         raise RuntimeError("AI provider API key is not configured")
@@ -511,9 +516,43 @@ async def roast(
         max_completion_tokens=ROAST_MAX_COMPLETION_TOKENS,
         reasoning_effort=ROAST_REASONING_EFFORT,
         messages=(
-            [{"role": "system", "content": system_prompt(points, rules, chronology, language=language)}]
+            [{"role": "system", "content": system_prompt_text or system_prompt(points, rules, chronology, language=language)}]
             + _trim_chain(messages)
         ),
+    )
+    reply = split_rules_update(_extract_text(response))
+    if not reply.text:
+        raise RuntimeError("AI provider returned an empty response")
+    return reply
+
+
+async def roast_with_openrouter_model(
+    messages: list[dict],
+    model: str,
+    points: list[MemoryItem] | None = None,
+    rules: list[MemoryItem] | None = None,
+    chronology: list[MemoryItem] | None = None,
+    language: str | None = None,
+    system_prompt_text: str | None = None,
+) -> RoastReply:
+    if not settings.openrouter_api_key:
+        raise RuntimeError("OPENROUTER_API_KEY is not configured")
+
+    openrouter_client = create_openrouter_chat_client()
+    response = await openrouter_client.chat.completions.create(
+        model=model,
+        max_completion_tokens=ROAST_MAX_COMPLETION_TOKENS,
+        reasoning_effort=ROAST_REASONING_EFFORT,
+        messages=(
+            [{"role": "system", "content": system_prompt_text or system_prompt(points, rules, chronology, language=language)}]
+            + _trim_chain(messages)
+        ),
+        extra_body={
+            "provider": {
+                "data_collection": settings.openrouter_data_collection,
+                "allow_fallbacks": settings.openrouter_allow_fallbacks,
+            },
+        },
     )
     reply = split_rules_update(_extract_text(response))
     if not reply.text:

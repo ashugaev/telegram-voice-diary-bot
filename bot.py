@@ -766,6 +766,75 @@ def _store_roast_chain(chat_id: int, message_id: int, messages: list[dict]) -> N
     _roast_chains[_roast_chain_key(chat_id, message_id)] = [dict(message) for message in messages]
 
 
+def _roast_action_keyboard(language: str | None = None) -> InlineKeyboardMarkup | None:
+    if not roast.is_multimodel_configured():
+        return None
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton(t("button.multimodel", language), callback_data="multimodel"),
+        InlineKeyboardButton(t("button.vote", language), callback_data="vote"),
+    ]])
+
+
+def _model_label(model: str) -> str:
+    return model.rsplit("/", 1)[-1]
+
+
+def _multimodel_prompt_context(
+    points: list[memory.MemoryItem],
+    rules: list[memory.MemoryItem],
+    chronology: list[memory.MemoryItem],
+    system_prompt_text: str,
+) -> dict[str, Any]:
+    return {
+        "points": memory.dump(points),
+        "rules": memory.dump(rules),
+        "chronology": memory.dump(chronology),
+        "system_prompt": system_prompt_text,
+    }
+
+
+def _multimodel_stats_text(session: dict[str, Any], language: str | None = None) -> str:
+    votes = session.get("votes", {})
+    per_model: dict[str, int] = {}
+    for model in votes.values():
+        per_model[str(model)] = per_model.get(str(model), 0) + 1
+    lines = [t("multimodel.vote_saved", language)]
+    if per_model:
+        lines.append("")
+        lines.append(t("multimodel.session_stats", language))
+        for model, count in sorted(per_model.items(), key=lambda item: (-item[1], item[0])):
+            lines.append(f"{_model_label(model)}: {count}")
+    global_votes = state_store.get_multimodel_model_votes()
+    if global_votes:
+        lines.append("")
+        lines.append(t("multimodel.global_stats", language))
+        for model, count in sorted(global_votes.items(), key=lambda item: (-item[1], item[0]))[:10]:
+            lines.append(f"{_model_label(model)}: {count}")
+    return "\n".join(lines)
+
+
+def _register_roast_option_messages(
+    messages: list[Any],
+    model: str,
+    text: str,
+    prompt_chain: list[dict],
+    session_id: str | None,
+    memory_context: dict[str, Any] | None,
+) -> str | None:
+    registered_session_id = session_id
+    for message in messages:
+        registered_session_id = state_store.register_multimodel_option(
+            _message_chat_id(message),
+            message.message_id,
+            model,
+            text,
+            prompt_chain,
+            session_id=registered_session_id,
+            memory_context=memory_context,
+        )
+    return registered_session_id
+
+
 def _split_message(text: str, limit: int = TELEGRAM_MESSAGE_LIMIT) -> list[str]:
     chunks = []
     remaining = text.strip()
@@ -782,20 +851,42 @@ def _split_message(text: str, limit: int = TELEGRAM_MESSAGE_LIMIT) -> list[str]:
     return chunks or [""]
 
 
-async def _deliver_roast(reply_target, chain: list[dict], context, status_message=None):
+async def _deliver_roast(
+    reply_target,
+    chain: list[dict],
+    context,
+    status_message=None,
+    model: str | None = None,
+    prompt_chain: list[dict] | None = None,
+    session_id: str | None = None,
+    memory_context: dict[str, Any] | None = None,
+    language: str | None = None,
+):
     """Send the latest assistant turn (chain[-1]) as Telegram message(s) and map every
     delivered message id to the full chain so the user can reply to continue it."""
     chunks = _split_message(chain[-1]["content"])
     sent_messages = []
+    reply_markup = _roast_action_keyboard(language)
     for index, chunk in enumerate(chunks):
         if index == 0 and status_message is not None:
-            await _edit_reply_message(context, status_message, chunk)
+            kwargs = {"reply_markup": reply_markup} if reply_markup is not None else {}
+            await _edit_reply_message(context, status_message, chunk, **kwargs)
             sent_messages.append(status_message)
         else:
             target = sent_messages[-1] if sent_messages else reply_target
-            sent_messages.append(await _reply_to_source(target, chunk))
+            kwargs = {"reply_markup": reply_markup} if reply_markup is not None else {}
+            sent_messages.append(await _reply_to_source(target, chunk, **kwargs))
     for message in sent_messages:
         _store_roast_chain(_message_chat_id(message), message.message_id, chain)
+    if roast.is_multimodel_configured() and model and prompt_chain is not None:
+        _register_roast_option_messages(
+            sent_messages,
+            model,
+            chain[-1]["content"],
+            prompt_chain,
+            session_id,
+            memory_context,
+        )
     return sent_messages[-1]
 
 
@@ -1042,8 +1133,14 @@ async def _run_roast(reply_target, chain: list[dict], context, status_message=No
     points = state_store.get_profile_points()
     rules = state_store.get_rules()
     chronology = state_store.get_chronology()
+    prompt_chain = [dict(message) for message in chain]
+    system_prompt_text = roast.system_prompt(points, rules, chronology, language=language)
+    prompt_context = _multimodel_prompt_context(points, rules, chronology, system_prompt_text)
     try:
-        reply = await roast.roast(chain, points=points, rules=rules, chronology=chronology, language=language)
+        reply = await roast.roast(
+            chain, points=points, rules=rules, chronology=chronology,
+            language=language, system_prompt_text=system_prompt_text,
+        )
     except TypeError:
         reply = await roast.roast(chain, points=points, rules=rules, chronology=chronology)
     except Exception as e:
@@ -1055,7 +1152,16 @@ async def _run_roast(reply_target, chain: list[dict], context, status_message=No
             await _reply_to_source(reply_target, error_text)
         return
     chain.append({"role": "assistant", "content": reply.text})
-    last = await _deliver_roast(reply_target, chain, context, status_message=status_message)
+    last = await _deliver_roast(
+        reply_target,
+        chain,
+        context,
+        status_message=status_message,
+        model=settings.roast_model,
+        prompt_chain=prompt_chain,
+        memory_context=prompt_context,
+        language=language,
+    )
     try:
         await _persist_rules_ops(last, chain, rules, reply.rules_ops, language=language)
     except Exception:
@@ -1076,6 +1182,99 @@ async def _roast_draft(query, context: ContextTypes.DEFAULT_TYPE, draft: dict) -
     status = await _reply_to_source(query.message, t("roast.status", language))
     chain = [{"role": "user", "content": text}]
     await _run_roast(query.message, chain, context, status_message=status)
+
+
+def _multimodel_session_for_message(message) -> dict[str, Any] | None:
+    stored = state_store.get_multimodel_message(_message_chat_id(message), message.message_id)
+    return state_store.get_multimodel_session(stored["session_id"]) if stored else None
+
+
+async def multimodel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    language = _message_language(update=update)
+    if not roast.is_multimodel_configured():
+        await query.message.reply_text(t("multimodel.unavailable", language))
+        return
+
+    session = _multimodel_session_for_message(query.message)
+    if not session:
+        await query.message.reply_text(t("multimodel.gone", language))
+        return
+
+    prompt_chain = session.get("prompt_chain") or []
+    if not prompt_chain:
+        await query.message.reply_text(t("multimodel.gone", language))
+        return
+
+    existing_models = set(session.get("options", {}))
+    models = [
+        model for model in settings.openrouter_roast_models
+        if model not in existing_models
+    ]
+    if not models:
+        await query.message.reply_text(t("multimodel.done", language))
+        return
+
+    status = await _reply_to_source(query.message, t("multimodel.status", language))
+    context_data = session.get("memory_context") or {}
+    points = memory.load(context_data.get("points", []))
+    rules = memory.load(context_data.get("rules", []))
+    chronology = memory.load(context_data.get("chronology", []))
+    system_prompt_text = context_data.get("system_prompt")
+
+    async def run_model(model: str):
+        try:
+            reply = await roast.roast_with_openrouter_model(
+                prompt_chain,
+                model,
+                points=points,
+                rules=rules,
+                chronology=chronology,
+                language=language,
+                system_prompt_text=system_prompt_text,
+            )
+            return model, reply, None
+        except Exception as exc:
+            logger.exception("Error generating multimodel roast with %s", model)
+            return model, None, exc
+
+    results = await asyncio.gather(*(run_model(model) for model in models))
+    await _edit_reply_message(context, status, t("multimodel.done", language))
+
+    session_id = session["id"]
+    for model, reply, error in results:
+        if error is not None:
+            await _reply_to_source(
+                query.message,
+                t("multimodel.model_failed", language, model=_model_label(model), error=error),
+            )
+            continue
+        text = f"{_model_label(model)}\n\n{reply.text}"
+        chain = [dict(item) for item in prompt_chain] + [{"role": "assistant", "content": text}]
+        await _deliver_roast(
+            query.message,
+            chain,
+            context,
+            model=model,
+            prompt_chain=prompt_chain,
+            session_id=session_id,
+            memory_context=context_data,
+            language=language,
+        )
+
+
+async def vote_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    language = _message_language(update=update)
+    user = getattr(query, "from_user", None) or getattr(update, "effective_user", None)
+    user_id = getattr(user, "id", "unknown")
+    session = state_store.vote_multimodel(_message_chat_id(query.message), query.message.message_id, user_id)
+    if not session:
+        await query.message.reply_text(t("multimodel.vote_gone", language))
+        return
+    await query.message.reply_text(_multimodel_stats_text(session, language))
 
 
 def _is_memory_note_text(text: str) -> bool:
@@ -2523,6 +2722,18 @@ def main() -> None:
         CallbackQueryHandler(
             language_callback,
             pattern="^(lang|language):",
+        )
+    )
+    app.add_handler(
+        CallbackQueryHandler(
+            multimodel_callback,
+            pattern="^multimodel$",
+        )
+    )
+    app.add_handler(
+        CallbackQueryHandler(
+            vote_callback,
+            pattern="^vote$",
         )
     )
     app.add_handler(
