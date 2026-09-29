@@ -670,6 +670,12 @@ def _retry_processing_keyboard(message_key: str, language: str | None = None) ->
     ])
 
 
+def _retry_roast_keyboard(entry_id: str, language: str | None = None) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(t("button.retry", language), callback_data=f"retry_roast:{entry_id}")],
+    ])
+
+
 def _duplicate_warning_text(metadata: dict | None, language: str | None = None) -> str:
     if metadata and metadata.get("source") == "voice":
         return t("duplicate.voice", language)
@@ -1127,7 +1133,7 @@ async def _persist_rules_ops(
     await _sync_bot_memory()
 
 
-async def _run_roast(reply_target, chain: list[dict], context, status_message=None) -> None:
+async def _run_roast(reply_target, chain: list[dict], context, status_message=None, failure_markup=None) -> None:
     language = _message_language(reply_target)
     # Hand edits in Notion outrank stored memory, so pull before reading it.
     await _sync_memory()
@@ -1138,19 +1144,20 @@ async def _run_roast(reply_target, chain: list[dict], context, status_message=No
     system_prompt_text = roast.system_prompt(points, rules, chronology, language=language)
     prompt_context = _multimodel_prompt_context(points, rules, chronology, system_prompt_text)
     try:
-        reply = await roast.roast(
-            chain, points=points, rules=rules, chronology=chronology,
-            language=language, system_prompt_text=system_prompt_text,
-        )
-    except TypeError:
-        reply = await roast.roast(chain, points=points, rules=rules, chronology=chronology)
+        try:
+            reply = await roast.roast(
+                chain, points=points, rules=rules, chronology=chronology,
+                language=language, system_prompt_text=system_prompt_text,
+            )
+        except TypeError:
+            reply = await roast.roast(chain, points=points, rules=rules, chronology=chronology)
     except Exception as e:
         logger.exception("Error generating roast")
         error_text = t("roast.failed", language, error=e)
         if status_message is not None:
-            await _edit_reply_message(context, status_message, error_text)
+            await _edit_reply_message(context, status_message, error_text, reply_markup=failure_markup)
         else:
-            await _reply_to_source(reply_target, error_text)
+            await _reply_to_source(reply_target, error_text, reply_markup=failure_markup)
         return
     chain.append({"role": "assistant", "content": reply.text})
     last = await _deliver_roast(
@@ -1169,7 +1176,7 @@ async def _run_roast(reply_target, chain: list[dict], context, status_message=No
         logger.exception("Failed to persist roast rules update")
 
 
-async def _roast_draft(query, context: ContextTypes.DEFAULT_TYPE, draft: dict) -> None:
+async def _roast_draft(query, context: ContextTypes.DEFAULT_TYPE, draft: dict, status_message=None) -> None:
     language = draft.get("language") or _message_language(update=query)
     if not roast.is_configured():
         await query.message.reply_text(t("roast.unavailable", language))
@@ -1180,9 +1187,24 @@ async def _roast_draft(query, context: ContextTypes.DEFAULT_TYPE, draft: dict) -
         await query.message.reply_text(t("roast.empty", language))
         return
 
-    status = await _reply_to_source(query.message, t("roast.status", language))
+    status = status_message or await _reply_to_source(query.message, t("roast.status", language))
     chain = [{"role": "user", "content": text}]
-    await _run_roast(query.message, chain, context, status_message=status)
+    await _run_roast(
+        query.message, chain, context, status_message=status,
+        failure_markup=_retry_roast_keyboard(draft["id"], language),
+    )
+
+
+async def retry_roast_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    entry_id = (query.data or "").partition(":")[2]
+    draft = _get_draft(context, entry_id)
+    if not draft:
+        await query.edit_message_text(t("draft.gone", _message_language(update=update)))
+        return
+    await query.edit_message_text(t("retrying", draft.get("language")))
+    await _roast_draft(query, context, draft, status_message=query.message)
 
 
 def _multimodel_session_for_message(message) -> dict[str, Any] | None:
@@ -2723,6 +2745,7 @@ def main() -> None:
             pattern="^retry_process:",
         )
     )
+    app.add_handler(CallbackQueryHandler(retry_roast_callback, pattern="^retry_roast:"))
     app.add_handler(
         CallbackQueryHandler(
             duplicate_callback,

@@ -1774,6 +1774,33 @@ class RoastFlowTests(unittest.IsolatedAsyncioTestCase):
     def tearDown(self):
         bot._roast_chains.clear()
 
+    async def test_failed_roast_has_retry_button_and_callback_reuses_draft(self):
+        fake_bot = FakeRoastBot()
+        query = FakeQuery(data="retry_roast:entry-1")
+        query.message.get_bot = lambda: fake_bot
+        context = SimpleNamespace(bot=fake_bot, user_data={"drafts": {}})
+        draft = {"id": "entry-1", "text": "original draft", "chat_id": 123}
+        failure = RuntimeError("rate limited")
+        with (
+            patch.object(bot.roast, "is_configured", return_value=True),
+            patch.object(bot.roast, "roast", new=AsyncMock(side_effect=failure)) as roast_call,
+            patch.object(bot.state_store, "get_draft", return_value=draft),
+            patch.object(bot.state_store, "get_profile_points", return_value=[]),
+            patch.object(bot.state_store, "get_rules", return_value=[]),
+            patch.object(bot.state_store, "get_chronology", return_value=[]),
+            patch.object(bot, "_sync_memory", new=AsyncMock()),
+            patch.object(bot.logger, "exception"),
+        ):
+            await bot._roast_draft(query, context, draft)
+            keyboard = fake_bot.edits[-1]["reply_markup"]
+            self.assertEqual(keyboard.inline_keyboard[0][0].callback_data, "retry_roast:entry-1")
+            await bot.retry_roast_callback(SimpleNamespace(callback_query=query), context)
+
+        self.assertEqual(query.edits[0]["text"], "Retrying...")
+        self.assertEqual(roast_call.await_count, 2)
+        self.assertEqual(fake_bot.edits[-1]["reply_markup"].inline_keyboard[0][0].callback_data,
+                         "retry_roast:entry-1")
+
     async def test_roast_button_sends_reply_and_stores_chain(self):
         fake_bot = FakeRoastBot()
         query = SimpleNamespace(
