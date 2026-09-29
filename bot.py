@@ -112,6 +112,7 @@ _roast_chains: dict[str, list[dict]] = {}
 _chat_mode_chains: dict[int, list[dict]] = {}
 _chat_mode_locks: dict[int, asyncio.Lock] = {}
 _chat_mode_tails: dict[int, asyncio.Event] = {}
+_voice_retry_inflight: set[str] = set()
 CHAT_MODE_MAX_MESSAGES = 30
 CHAT_MODE_RETAIN_MESSAGES = 10
 
@@ -676,6 +677,34 @@ def _retry_roast_keyboard(entry_id: str, language: str | None = None) -> InlineK
     ])
 
 
+def _voice_retry_key(message) -> str:
+    return f"{_message_chat_id(message)}:{message.message_id}"
+
+
+def _voice_retry_keyboard(message, language: str | None = None) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(t("button.retry", language), callback_data=f"retry_voice:{_voice_retry_key(message)}")],
+    ])
+
+
+def _save_voice_retry(message, purpose: str, language: str, **details) -> None:
+    state_store.save_voice_retry(_voice_retry_key(message), {
+        "chat_id": _message_chat_id(message),
+        "message_id": message.message_id,
+        "file_id": message.voice.file_id,
+        "purpose": purpose,
+        "language": language,
+        **details,
+    })
+
+
+async def _voice_retry_error(context, status, message, language: str, error_text: str) -> None:
+    await _edit_reply_message(
+        context, status, error_text,
+        reply_markup=_voice_retry_keyboard(message, language),
+    )
+
+
 def _duplicate_warning_text(metadata: dict | None, language: str | None = None) -> str:
     if metadata and metadata.get("source") == "voice":
         return t("duplicate.voice", language)
@@ -1133,7 +1162,7 @@ async def _persist_rules_ops(
     await _sync_bot_memory()
 
 
-async def _run_roast(reply_target, chain: list[dict], context, status_message=None, failure_markup=None) -> None:
+async def _run_roast(reply_target, chain: list[dict], context, status_message=None, failure_markup=None) -> bool:
     language = _message_language(reply_target)
     # Hand edits in Notion outrank stored memory, so pull before reading it.
     await _sync_memory()
@@ -1158,7 +1187,7 @@ async def _run_roast(reply_target, chain: list[dict], context, status_message=No
             await _edit_reply_message(context, status_message, error_text, reply_markup=failure_markup)
         else:
             await _reply_to_source(reply_target, error_text, reply_markup=failure_markup)
-        return
+        return False
     chain.append({"role": "assistant", "content": reply.text})
     last = await _deliver_roast(
         reply_target,
@@ -1174,6 +1203,7 @@ async def _run_roast(reply_target, chain: list[dict], context, status_message=No
         await _persist_rules_ops(last, chain, rules, reply.rules_ops, language=language)
     except Exception:
         logger.exception("Failed to persist roast rules update")
+    return True
 
 
 async def _roast_draft(query, context: ContextTypes.DEFAULT_TYPE, draft: dict, status_message=None) -> None:
@@ -1205,6 +1235,56 @@ async def retry_roast_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         return
     await query.edit_message_text(t("retrying", draft.get("language")))
     await _roast_draft(query, context, draft, status_message=query.message)
+
+
+async def retry_voice_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    key = (query.data or "").partition(":")[2]
+    retry = state_store.get_voice_retry(key)
+    if not retry:
+        await query.edit_message_text(t("message.gone", _message_language(update=update)))
+        return
+    if key in _voice_retry_inflight:
+        await query.message.reply_text(t("processing", retry["language"]))
+        return
+
+    _voice_retry_inflight.add(key)
+    try:
+        await query.edit_message_text(t("retrying", retry["language"]))
+        chat_id = retry["chat_id"]
+        message = SimpleNamespace(
+            chat_id=chat_id,
+            message_id=retry["message_id"],
+            voice=SimpleNamespace(file_id=retry["file_id"]),
+            get_bot=lambda: context.bot,
+            reply_text=lambda text, **kwargs: context.bot.send_message(chat_id=chat_id, text=text, **kwargs),
+        )
+        replay = SimpleNamespace(
+            effective_message=message,
+            effective_chat=SimpleNamespace(id=chat_id),
+        )
+        purpose = retry["purpose"]
+        if purpose == "chat_voice":
+            await _handle_chat_mode_voice(replay, context, status_message=query.message)
+        elif purpose == "roast_followup":
+            await _handle_roast_voice_followup(
+                replay, context, retry["chain"], status_message=query.message,
+            )
+        elif purpose == "draft_voice_reply":
+            draft = _get_draft(context, retry["draft_id"])
+            if draft:
+                await _handle_draft_voice_reply(replay, context, draft, status_message=query.message)
+            else:
+                state_store.clear_voice_retry(key)
+                await query.edit_message_text(t("draft.gone", retry["language"]))
+        elif purpose == "memory_focus":
+            await _receive_memory_focus_voice(replay, context, status_message=query.message)
+        else:
+            state_store.clear_voice_retry(key)
+            await query.edit_message_text(t("message.gone", retry["language"]))
+    finally:
+        _voice_retry_inflight.discard(key)
 
 
 def _multimodel_session_for_message(message) -> dict[str, Any] | None:
@@ -1381,7 +1461,8 @@ async def _process_roast_followup(
     chain: list[dict],
     reply_text: str,
     status_message=None,
-) -> None:
+    failure_markup=None,
+) -> bool:
     user_msg = update.effective_message
     language = _message_language(user_msg, update)
     chat_id = _message_chat_id(user_msg)
@@ -1398,11 +1479,21 @@ async def _process_roast_followup(
                 roast_chain_to_run = await _compact_chat_chain(chat_chain, language=language)
             else:
                 roast_chain_to_run = list(chain) + [{"role": "user", "content": reply_text}]
-            await _run_roast(user_msg, roast_chain_to_run, context, status_message=status_message)
-            _chat_mode_chains[chat_id] = roast_chain_to_run
+            success = await _run_roast(
+                user_msg, roast_chain_to_run, context,
+                status_message=status_message, failure_markup=failure_markup,
+            )
+            if success is not False:
+                _chat_mode_chains[chat_id] = roast_chain_to_run
     else:
         new_chain = list(chain) + [{"role": "user", "content": reply_text}]
-        await _run_roast(user_msg, new_chain, context, status_message=status_message)
+        success = await _run_roast(
+            user_msg, new_chain, context,
+            status_message=status_message, failure_markup=failure_markup,
+        )
+
+    if success is False:
+        return False
 
     if note_text:
         original_entry = _original_entry_from_chain(chain)
@@ -1416,6 +1507,7 @@ async def _process_roast_followup(
             context.application.create_task(
                 _update_memory_and_chronology(reply_text, reply_target=user_msg, language=language)
             )
+    return True
 
 
 async def _handle_roast_followup(update: Update, context: ContextTypes.DEFAULT_TYPE, chain: list[dict]) -> None:
@@ -1434,22 +1526,23 @@ async def _handle_roast_voice_followup(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
     chain: list[dict],
+    status_message=None,
 ) -> None:
     """Continue a roast conversation from a voice reply: transcribe first, then roast."""
     user_msg = update.effective_message
     language = _message_language(user_msg, update)
-    status = await _reply_to_source(user_msg, t("transcribing", language))
+    _save_voice_retry(user_msg, "roast_followup", language, chain=chain)
+    status = status_message or await _reply_to_source(user_msg, t("transcribing", language))
     try:
         reply_text = await _transcribe_voice_file(context, user_msg.voice.file_id)
     except Exception as e:
         logger.exception("Error transcribing roast follow-up voice message")
-        await _edit_reply_message(context, status, t("error", language, error=e))
+        await _voice_retry_error(context, status, user_msg, language, t("error", language, error=e))
         return
 
     if not reply_text:
-        await _edit_reply_message(
-            context,
-            status,
+        await _voice_retry_error(
+            context, status, user_msg, language,
             t("speech.empty", language, model=settings.openai_transcription_model),
         )
         return
@@ -1460,7 +1553,12 @@ async def _handle_roast_voice_followup(
         reply_text,
     )
     await _edit_reply_message(context, status, t("roast.thinking", language))
-    await _process_roast_followup(update, context, chain, reply_text, status_message=status)
+    success = await _process_roast_followup(
+        update, context, chain, reply_text, status_message=status,
+        failure_markup=_voice_retry_keyboard(user_msg, language),
+    )
+    if success is not False:
+        state_store.clear_voice_retry(_voice_retry_key(user_msg))
 
 
 async def _set_chat_commands(context: ContextTypes.DEFAULT_TYPE, chat_id: int, language: str) -> None:
@@ -1770,7 +1868,7 @@ async def _handle_chat_mode_text(update: Update, context: ContextTypes.DEFAULT_T
             _chat_mode_tails.pop(chat_id, None)
 
 
-async def _handle_chat_mode_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def _handle_chat_mode_voice(update: Update, context: ContextTypes.DEFAULT_TYPE, status_message=None) -> None:
     message = update.effective_message
     language = _message_language(message, update)
     if not roast.is_configured():
@@ -1782,20 +1880,21 @@ async def _handle_chat_mode_voice(update: Update, context: ContextTypes.DEFAULT_
     prev_turn = _chat_mode_tails.get(chat_id)
     _chat_mode_tails[chat_id] = my_turn
 
-    status = None
+    _save_voice_retry(message, "chat_voice", language)
+    status = status_message
     try:
-        status = await _reply_to_source(message, t("transcribing", language))
+        if status is None:
+            status = await _reply_to_source(message, t("transcribing", language))
         try:
             user_text = await _transcribe_voice_file(context, message.voice.file_id)
         except Exception as e:
             logger.exception("Error transcribing chat voice message")
-            await _edit_reply_message(context, status, t("error", language, error=e))
+            await _voice_retry_error(context, status, message, language, t("error", language, error=e))
             return
 
         if not user_text:
-            await _edit_reply_message(
-                context,
-                status,
+            await _voice_retry_error(
+                context, status, message, language,
                 t("speech.empty", language, model=settings.openai_transcription_model),
             )
             return
@@ -1813,8 +1912,15 @@ async def _handle_chat_mode_voice(update: Update, context: ContextTypes.DEFAULT_
         await _edit_reply_message(context, status, t("roast.thinking", language))
         async with _get_chat_mode_lock(chat_id):
             chain = await _prepare_chat_chain(chat_id, user_text, language=language)
-            await _run_roast(message, chain, context, status_message=status)
-            _chat_mode_chains[chat_id] = chain
+            success = await _run_roast(
+                message, chain, context, status_message=status,
+                failure_markup=_voice_retry_keyboard(message, language),
+            )
+            if success is not False:
+                _chat_mode_chains[chat_id] = chain
+        if success is False:
+            return
+        state_store.clear_voice_retry(_voice_retry_key(message))
         context.application.create_task(_update_memory_and_chronology(user_text, message, language=language))
     finally:
         my_turn.set()
@@ -2296,16 +2402,18 @@ async def _apply_draft_reply_edit(
     context: ContextTypes.DEFAULT_TYPE,
     draft: dict[str, Any],
     instruction: str,
-) -> None:
+    status_message=None,
+    failure_markup=None,
+) -> bool:
     user_msg = update.effective_message
     language = draft.get("language") or _message_language(user_msg, update)
     instruction_text = (instruction or "").strip()
     if not instruction_text:
-        return
+        return False
 
     if draft.get("saving"):
         await user_msg.reply_text(t("draft.saving", language))
-        return
+        return False
 
     rules = state_store.get_rules() if hasattr(state_store, "get_rules") else []
     with suppress(Exception):
@@ -2322,8 +2430,11 @@ async def _apply_draft_reply_edit(
         )
     except Exception as e:
         logger.exception("Error adjusting draft via reply")
-        await user_msg.reply_text(t("error", language, error=e))
-        return
+        if status_message is not None:
+            await _edit_reply_message(context, status_message, t("error", language, error=e), reply_markup=failure_markup)
+        else:
+            await user_msg.reply_text(t("error", language, error=e))
+        return False
 
     draft["title"] = new_title
     draft["text"] = new_text
@@ -2333,34 +2444,41 @@ async def _apply_draft_reply_edit(
         draft.setdefault("thread_msg_ids", []).append(user_msg.message_id)
     state_store.save_draft(draft)
     await _edit_preview(context, draft)
+    return True
 
 
 async def _handle_draft_voice_reply(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
     draft: dict[str, Any],
+    status_message=None,
 ) -> None:
     user_msg = update.effective_message
     language = draft.get("language") or _message_language(user_msg, update)
-    status = await _reply_to_source(user_msg, t("transcribing", language))
+    _save_voice_retry(user_msg, "draft_voice_reply", language, draft_id=draft["id"])
+    status = status_message or await _reply_to_source(user_msg, t("transcribing", language))
     try:
         instruction = await _transcribe_voice_file(context, user_msg.voice.file_id)
     except Exception as e:
         logger.exception("Error transcribing voice draft reply")
-        await _edit_reply_message(context, status, t("error", language, error=e))
+        await _voice_retry_error(context, status, user_msg, language, t("error", language, error=e))
         return
 
     if not instruction:
-        await _edit_reply_message(
-            context,
-            status,
+        await _voice_retry_error(
+            context, status, user_msg, language,
             t("speech.empty", language, model=settings.openai_transcription_model),
         )
         return
 
-    with suppress(Exception):
-        await context.bot.delete_message(update.effective_chat.id, status.message_id)
-    await _apply_draft_reply_edit(update, context, draft, instruction)
+    success = await _apply_draft_reply_edit(
+        update, context, draft, instruction, status_message=status,
+        failure_markup=_voice_retry_keyboard(user_msg, language),
+    )
+    if success is not False:
+        state_store.clear_voice_retry(_voice_retry_key(user_msg))
+        with suppress(Exception):
+            await context.bot.delete_message(update.effective_chat.id, status.message_id)
 
 
 async def receive_edit_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2516,28 +2634,29 @@ async def _receive_memory_focus(
     )
 
 
-async def _receive_memory_focus_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def _receive_memory_focus_voice(update: Update, context: ContextTypes.DEFAULT_TYPE, status_message=None) -> None:
     """A voice reply to the focus prompt is transcribed into focus, never saved as a note."""
     message = update.effective_message
     language = _message_language(message, update)
-    status = await _reply_to_source(message, t("transcribing", language))
+    _save_voice_retry(message, "memory_focus", language)
+    status = status_message or await _reply_to_source(message, t("transcribing", language))
     try:
         focus_text = await _transcribe_voice_file(context, message.voice.file_id)
     except Exception as e:
         logger.exception("Error transcribing memory focus voice message")
-        await _edit_reply_message(context, status, t("memory.voice_retry", language, error=e))
+        await _voice_retry_error(context, status, message, language, t("memory.voice_retry", language, error=e))
         return
 
     if not focus_text:
-        await _edit_reply_message(
-            context,
-            status,
+        await _voice_retry_error(
+            context, status, message, language,
             t("memory.no_speech_retry", language, model=settings.openai_transcription_model),
         )
         return
 
     await _edit_reply_message(context, status, t("memory.focus", language, focus=focus_text))
     await _receive_memory_focus(update, context, focus_text)
+    state_store.clear_voice_retry(_voice_retry_key(message))
 
 
 async def memory_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2746,6 +2865,7 @@ def main() -> None:
         )
     )
     app.add_handler(CallbackQueryHandler(retry_roast_callback, pattern="^retry_roast:"))
+    app.add_handler(CallbackQueryHandler(retry_voice_callback, pattern="^retry_voice:"))
     app.add_handler(
         CallbackQueryHandler(
             duplicate_callback,

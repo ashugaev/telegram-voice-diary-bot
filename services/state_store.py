@@ -13,6 +13,7 @@ from services.memory import MemoryItem
 
 STATE_PATH = Path(os.getenv("BOT_STATE_PATH", ".data/message_state.json"))
 MAX_RETAINED_MESSAGES = 200
+MAX_RETAINED_VOICE_RETRIES = 200
 # State sections mirrored to a Notion memory page.
 PROFILE_SECTION = "profile"
 RULES_SECTION = "rules"
@@ -37,6 +38,7 @@ class StateStore:
             return {
                 "version": 1,
                 "messages": {},
+                "voice_retries": {},
                 "drafts": {},
                 "modes": {},
                 "profile": {"points": [], "notion_mirror": []},
@@ -48,6 +50,7 @@ class StateStore:
             data = json.load(f)
         data.setdefault("version", 1)
         data.setdefault("messages", {})
+        data.setdefault("voice_retries", {})
         data.setdefault("drafts", {})
         data.setdefault("modes", {})
         data.setdefault("profile", {})
@@ -164,6 +167,21 @@ class StateStore:
     def get_message(self, key: str) -> dict[str, Any] | None:
         message = self.data["messages"].get(key)
         return deepcopy(message) if message else None
+
+    def save_voice_retry(self, key: str, payload: dict[str, Any]) -> None:
+        retries = self.data["voice_retries"]
+        retries[key] = deepcopy(payload)
+        while len(retries) > MAX_RETAINED_VOICE_RETRIES:
+            retries.pop(next(iter(retries)))
+        self._save()
+
+    def get_voice_retry(self, key: str) -> dict[str, Any] | None:
+        value = self.data["voice_retries"].get(key)
+        return deepcopy(value) if value else None
+
+    def clear_voice_retry(self, key: str) -> None:
+        if self.data["voice_retries"].pop(key, None) is not None:
+            self._save()
 
     def mark_message_processing(self, key: str) -> None:
         self._update_message(key, {"status": "processing", "error": None})
