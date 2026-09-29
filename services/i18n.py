@@ -349,8 +349,8 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ru": "🧠 В Notion нет сохраненных заметок — пересобирать не из чего.",
     },
     "memory.no_speech_retry": {
-        "en": "{model} did not recognize any speech. Run /memory again to retry.",
-        "ru": "{model} не распознал речь. Запусти /memory снова для повтора.",
+        "en": "{model} did not recognize any speech. Press Retry to try again.",
+        "ru": "{model} не распознал речь. Нажми Повторить, чтобы попробовать снова.",
     },
     "memory.notes_read": {
         "en": "Notes read: {count}",
@@ -393,8 +393,8 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ru": "🧠 Пересборка долгосрочной памяти\n\nЯ пройду все сохраненные записи в Notion от старых к новым и пересоберу профиль автора заметка за заметкой — один AI-запрос на заметку, как при обычной отправке.\n\n{stored}\n\nОтветь фокусом для этого прохода: что важнее всего, что сохранить, что убрать.\nОтправь - чтобы пересобрать без фокуса.",
     },
     "memory.voice_retry": {
-        "en": "Error: {error}\n\nRun /memory again to retry.",
-        "ru": "Ошибка: {error}\n\nЗапусти /memory снова для повтора.",
+        "en": "Error: {error}\n\nPress Retry to try again.",
+        "ru": "Ошибка: {error}\n\nНажми Повторить, чтобы попробовать снова.",
     },
     "message.gone": {
         "en": "This message is no longer available.",

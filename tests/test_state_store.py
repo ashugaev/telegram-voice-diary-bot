@@ -16,6 +16,17 @@ from services.state_store import CHRONOLOGY_SECTION, PROFILE_SECTION, RULES_SECT
 
 
 class StateStoreTests(unittest.TestCase):
+    def test_voice_retry_survives_restart_and_clears(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "state.json"
+            store = StateStore(path)
+            payload = {"file_id": "voice-file", "purpose": "chat_voice"}
+            store.save_voice_retry("123:10", payload)
+            payload["file_id"] = "changed"
+            self.assertEqual(StateStore(path).get_voice_retry("123:10")["file_id"], "voice-file")
+            store.clear_voice_retry("123:10")
+            self.assertIsNone(StateStore(path).get_voice_retry("123:10"))
+
     def test_records_messages_statuses_and_drafts(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             store = StateStore(Path(tmpdir) / "state.json")

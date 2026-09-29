@@ -650,6 +650,135 @@ class RetryProcessingFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(kwargs["status_message"], fake_query.message)
 
 
+class RetryVoiceFlowTests(unittest.IsolatedAsyncioTestCase):
+    async def test_auxiliary_voice_errors_offer_retry(self):
+        cases = [
+            ("chat_voice", lambda update, context: bot._handle_chat_mode_voice(update, context)),
+            ("roast_followup", lambda update, context: bot._handle_roast_voice_followup(
+                update, context, [{"role": "user", "content": "earlier"}]
+            )),
+            ("draft_voice_reply", lambda update, context: bot._handle_draft_voice_reply(
+                update, context, {"id": "draft-1", "text": "entry"}
+            )),
+            ("memory_focus", lambda update, context: bot._receive_memory_focus_voice(update, context)),
+        ]
+        for purpose, run in cases:
+            for outcome in ("error", "empty"):
+                with self.subTest(purpose=purpose, outcome=outcome):
+                    await self._assert_voice_failure(purpose, run, outcome)
+
+    async def _assert_voice_failure(self, purpose, run, outcome):
+        fake_bot = FakeRoastBot()
+        store = FakeStateStore()
+        message = SimpleNamespace(
+            chat_id=123, message_id=10,
+            voice=SimpleNamespace(file_id="voice-file"),
+            get_bot=lambda: fake_bot,
+        )
+        update = SimpleNamespace(
+            effective_message=message, effective_chat=SimpleNamespace(id=123),
+        )
+        context = SimpleNamespace(bot=fake_bot)
+        transcription = AsyncMock(
+            side_effect=RuntimeError("rate limited") if outcome == "error" else None,
+            return_value="",
+        )
+        with (
+            patch.object(bot, "state_store", store),
+            patch.object(bot, "_transcribe_voice_file", new=transcription),
+            patch.object(bot.logger, "exception"),
+            patch.object(bot.roast, "is_configured", return_value=True),
+        ):
+            await run(update, context)
+
+        self.assertEqual(store.voice_retries["123:10"]["purpose"], purpose)
+        self.assertEqual(store.voice_retries["123:10"]["file_id"], "voice-file")
+        self.assertEqual(
+            fake_bot.edits[-1]["reply_markup"].inline_keyboard[0][0].callback_data,
+            "retry_voice:123:10",
+        )
+
+    async def test_voice_retry_callback_replays_saved_context(self):
+        cases = {
+            "chat_voice": "_handle_chat_mode_voice",
+            "roast_followup": "_handle_roast_voice_followup",
+            "draft_voice_reply": "_handle_draft_voice_reply",
+            "memory_focus": "_receive_memory_focus_voice",
+        }
+        for purpose, handler_name in cases.items():
+            with self.subTest(purpose=purpose):
+                store = FakeStateStore()
+                store.voice_retries["123:10"] = {
+                    "chat_id": 123, "message_id": 10, "file_id": "voice-file",
+                    "purpose": purpose, "language": "en",
+                    "chain": [{"role": "user", "content": "earlier"}],
+                    "draft_id": "draft-1",
+                }
+                fake_query = FakeQuery(data="retry_voice:123:10")
+                fake_bot = FakeRoastBot()
+                context = SimpleNamespace(bot=fake_bot, user_data={"drafts": {}})
+                update = SimpleNamespace(callback_query=fake_query)
+                replay_handler = AsyncMock()
+                with (
+                    patch.object(bot, "state_store", store),
+                    patch.object(bot, handler_name, new=replay_handler),
+                    patch.object(bot, "_get_draft", return_value={"id": "draft-1"}),
+                ):
+                    await bot.retry_voice_callback(update, context)
+                self.assertEqual(fake_query.edits[0]["text"], "Retrying...")
+                replay_handler.assert_awaited_once()
+                args, kwargs = replay_handler.await_args
+                self.assertEqual(args[0].effective_message.voice.file_id, "voice-file")
+                self.assertIs(kwargs["status_message"], fake_query.message)
+
+    async def test_chat_voice_retry_processes_original_file_and_clears_retry(self):
+        store = FakeStateStore()
+        store.voice_retries["123:10"] = {
+            "chat_id": 123, "message_id": 10, "file_id": "voice-file",
+            "purpose": "chat_voice", "language": "en",
+        }
+        fake_query = FakeQuery(data="retry_voice:123:10")
+        fake_bot = FakeRoastBot()
+        context = SimpleNamespace(bot=fake_bot, application=FakeApplication(close_coroutines=True))
+        transcription = AsyncMock(return_value="spoken text")
+        with (
+            patch.object(bot, "state_store", store),
+            patch.object(bot, "_transcribe_voice_file", new=transcription),
+            patch.object(bot, "_prepare_chat_chain", new=AsyncMock(return_value=[
+                {"role": "user", "content": "spoken text"},
+            ])),
+            patch.object(bot, "_run_roast", new=AsyncMock(return_value=True)),
+        ):
+            await bot.retry_voice_callback(SimpleNamespace(callback_query=fake_query), context)
+
+        transcription.assert_awaited_once_with(context, "voice-file")
+        self.assertEqual(store.voice_retries, {})
+
+    async def test_failed_chat_voice_roast_keeps_retry_without_duplicating_chain(self):
+        store = FakeStateStore()
+        fake_bot = FakeRoastBot()
+        message = SimpleNamespace(
+            chat_id=123, message_id=10, voice=SimpleNamespace(file_id="voice-file"),
+            get_bot=lambda: fake_bot,
+        )
+        update = SimpleNamespace(effective_message=message)
+        context = SimpleNamespace(bot=fake_bot, application=FakeApplication(close_coroutines=True))
+        bot._chat_mode_chains.pop(123, None)
+        with (
+            patch.object(bot, "state_store", store),
+            patch.object(bot, "_transcribe_voice_file", new=AsyncMock(return_value="spoken text")),
+            patch.object(bot, "_prepare_chat_chain", new=AsyncMock(return_value=[
+                {"role": "user", "content": "spoken text"},
+            ])),
+            patch.object(bot, "_run_roast", new=AsyncMock(return_value=False)),
+            patch.object(bot.roast, "is_configured", return_value=True),
+        ):
+            await bot._handle_chat_mode_voice(update, context)
+
+        self.assertNotIn(123, bot._chat_mode_chains)
+        self.assertIn("123:10", store.voice_retries)
+
+
 class FormatDraftFlowTests(unittest.IsolatedAsyncioTestCase):
     async def test_formatted_draft_keyboard_hides_format_and_original(self):
         draft = {
@@ -1535,6 +1664,7 @@ class FakeApplicationBuilder:
 class FakeStateStore:
     def __init__(self):
         self.messages = {}
+        self.voice_retries = {}
         self.saved_drafts = []
         self.marked_processing = []
         self.marked_failed = []
@@ -1545,6 +1675,15 @@ class FakeStateStore:
         self.marked_saved = []
         self.removed_drafts = []
         self.duplicate_voice = None
+
+    def save_voice_retry(self, key, payload):
+        self.voice_retries[key] = dict(payload)
+
+    def get_voice_retry(self, key):
+        return self.voice_retries.get(key)
+
+    def clear_voice_retry(self, key):
+        self.voice_retries.pop(key, None)
 
     def record_voice(
         self,
@@ -3125,7 +3264,7 @@ class ChatModeFlowTests(unittest.IsolatedAsyncioTestCase):
         bot._chat_mode_locks.clear()
         bot._chat_mode_tails.clear()
 
-        async def slow_roast(target, chain, context, status_message=None):
+        async def slow_roast(target, chain, context, status_message=None, failure_markup=None):
             msg_text = chain[-1]["content"]
             execution_order.append(f"start {msg_text}")
             await asyncio.sleep(0.05)
@@ -3175,7 +3314,7 @@ class ChatModeFlowTests(unittest.IsolatedAsyncioTestCase):
                 return "voice two"
             return "voice"
 
-        async def slow_roast(target, chain, context, status_message=None):
+        async def slow_roast(target, chain, context, status_message=None, failure_markup=None):
             msg_text = chain[-1]["content"]
             execution_order.append(f"start {msg_text}")
             await asyncio.sleep(0.05)
@@ -3228,7 +3367,7 @@ class ChatModeFlowTests(unittest.IsolatedAsyncioTestCase):
                 return "second voice"
             return "voice"
 
-        async def slow_roast(target, chain, context, status_message=None):
+        async def slow_roast(target, chain, context, status_message=None, failure_markup=None):
             msg_text = chain[-1]["content"]
             execution_order.append(f"start {msg_text}")
             await asyncio.sleep(0.02)
@@ -3274,7 +3413,7 @@ class ChatModeFlowTests(unittest.IsolatedAsyncioTestCase):
                 raise RuntimeError("whisper failed")
             return "second voice"
 
-        async def fake_roast(target, chain, context, status_message=None):
+        async def fake_roast(target, chain, context, status_message=None, failure_markup=None):
             msg_text = chain[-1]["content"]
             execution_order.append(msg_text)
 
@@ -3318,7 +3457,7 @@ class ChatModeFlowTests(unittest.IsolatedAsyncioTestCase):
             def get_bot(self):
                 return fake_bot
 
-        async def slow_roast(target, chain, context, status_message=None):
+        async def slow_roast(target, chain, context, status_message=None, failure_markup=None):
             await asyncio.sleep(0.04)
 
         context = SimpleNamespace(
@@ -3352,7 +3491,7 @@ class ChatModeFlowTests(unittest.IsolatedAsyncioTestCase):
             def get_bot(self):
                 return fake_bot
 
-        async def slow_roast(target, chain, context, status_message=None):
+        async def slow_roast(target, chain, context, status_message=None, failure_markup=None):
             await asyncio.sleep(0.04)
 
         context = SimpleNamespace(
