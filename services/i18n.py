@@ -568,6 +568,26 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en": "Transcribing...",
         "ru": "Распознаю...",
     },
+    "cmd.voice": {
+        "en": "Toggle audio replies for Roast and Chat",
+        "ru": "Toggle audio replies for Roast and Chat",
+    },
+    "voice.enabled": {
+        "en": "Voice replies enabled for Roast and Chat. Voice is AI-generated.",
+        "ru": "Voice replies enabled for Roast and Chat. Voice is AI-generated.",
+    },
+    "voice.disabled": {
+        "en": "Voice replies disabled. Roast and Chat reply with text.",
+        "ru": "Voice replies disabled. Roast and Chat reply with text.",
+    },
+    "voice.usage": {
+        "en": "Use /voice to toggle, /voice on, or /voice off.",
+        "ru": "Use /voice to toggle, /voice on, or /voice off.",
+    },
+    "voice.fallback": {
+        "en": "Audio unavailable. Sending text instead.",
+        "ru": "Audio unavailable. Sending text instead.",
+    },
     "voice.gone": {
         "en": "This voice message is no longer available.",
         "ru": "Это голосовое уже недоступно.",

@@ -31,6 +31,7 @@ You'll need a Telegram bot token, an OpenAI API key, and a Notion integration + 
 | Command | Description |
 |---------|-------------|
 | `/start` | Welcome and quick overview |
+| `/voice [on\|off]` | Toggle AI voice replies for Roast and Chat |
 | `/help` | Commands and preview buttons |
 | `/diary` | Switch to Diary mode (default) |
 | `/chat` | Switch to Chat mode (roast prompt, no Notion save) |
@@ -41,6 +42,8 @@ You'll need a Telegram bot token, an OpenAI API key, and a Notion integration + 
 | `/lang` | Switch language (English / Russian) |
 
 The bot publishes this list to Telegram on startup, so typing `/` in the chat shows it.
+
+Voice replies use OpenAI speech (`gpt-4o-mini-tts`, `cedar`) with the existing `OPENAI_API_KEY`, even with another chat provider. Override `OPENAI_TTS_MODEL` and `OPENAI_TTS_VOICE` in `.env`. Replies arrive as Telegram voice notes; long replies split into parts. Speech errors fall back to text. Diary previews and memory notes stay text. Voice preference persists per chat, independently of Diary/Chat mode; default off.
 
 ## Docs
 

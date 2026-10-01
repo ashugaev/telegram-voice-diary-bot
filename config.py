@@ -89,6 +89,8 @@ class _Settings:
     openai_formatter_model: str = _optional_env("OPENAI_FORMATTER_MODEL", "gpt-6-sol")
     openai_summary_model: str = _optional_env("OPENAI_SUMMARY_MODEL", openai_formatter_model)
     openai_profile_model: str = _optional_env("OPENAI_PROFILE_MODEL", openai_summary_model)
+    openai_tts_model: str = _optional_env("OPENAI_TTS_MODEL", "gpt-4o-mini-tts")
+    openai_tts_voice: str = _optional_env("OPENAI_TTS_VOICE", "cedar")
     openai_roast_model: str = _optional_env("OPENAI_ROAST_MODEL", "gpt-6-sol")
     anthropic_formatter_model: str = _optional_env("ANTHROPIC_FORMATTER_MODEL", "claude-opus-5")
     anthropic_summary_model: str = _optional_env("ANTHROPIC_SUMMARY_MODEL", anthropic_formatter_model)

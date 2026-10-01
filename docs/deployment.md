@@ -9,6 +9,36 @@ make logs       # follow service logs
 make test       # offline validation — no Telegram/OpenAI/Notion calls
 ```
 
+## Safe validation sidecars
+
+Inspect the command before launch. The existing `dev` sidecar stops production.
+Use manual `check` instead; never start a second Telegram poller with the live token.
+
+```bash
+"$SPUR_SESSION_TOOL_DIR/spur-sidecar" --name check
+```
+
+`check` runs `scripts/check-sidecar.sh` once: test credentials, dotenv disabled,
+unique state and logs under `SPUR_SESSION_ARTIFACTS_DIR`, offline `make test`.
+Run fresh checks before merging. Failed or missing checks block release.
+
+With explicit authorization for a real OpenAI call:
+
+```bash
+"$SPUR_SESSION_TOOL_DIR/spur-sidecar" --name speech-check
+```
+
+`speech-check` runs offline checks first, then standalone `scripts/speech-smoke.py`.
+It reads only the OpenAI key from `.env` if absent in the environment, then calls
+shipped `services.speech.synthesize` with test credentials and isolated state.
+It validates Ogg Opus headers; never imports bot state or calls Telegram/Notion. Audio stays in session artifacts. Listen before claiming quality.
+`SPEECH_SMOKE_TEXT`, `OPENAI_TTS_MODEL`, and `OPENAI_TTS_VOICE` override defaults.
+
+Sidecars live in tracked `spur.yaml`; Spur reads the current worktree copy:
+`check: bash scripts/check-sidecar.sh`,
+`speech-check: bash scripts/check-sidecar.sh --speech`; both `autoStart: false`.
+Keep the canonical project copy synced; `spur connect` registers it, but session launches read worktree settings.
+
 ## Deploy
 
 ```bash
