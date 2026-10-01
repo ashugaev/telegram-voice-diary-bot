@@ -62,6 +62,14 @@ python -m unittest discover -s tests -v
 make test
 ```
 
+## Sidecar release gate
+
+- Inspect worktree `spur.yaml` before launch; Spur resolves sidecars from that file. `dev` stops production; do not use it for validation.
+- Run manual `check` sidecar: `bash scripts/check-sidecar.sh`. It disables dotenv loading, supplies test credentials, isolates state under `SPUR_SESSION_ARTIFACTS_DIR`, and runs `make test` once.
+- Use fresh passing sidecar evidence before merge. Keep test logs as session artifacts. Never claim untested live delivery.
+- Real API checks need explicit user authorization. Authorized `speech-check` runs offline tests, then standalone `scripts/speech-smoke.py`: calls shipped `services.speech.synthesize` with test credentials and isolated state; no bot imports, Telegram/Notion calls, or poller. It reads only the OpenAI key from `.env` when needed and writes validated Ogg Opus to session artifacts.
+- `SPEECH_SMOKE_TEXT`, `OPENAI_TTS_MODEL`, and `OPENAI_TTS_VOICE` may override the sample. Listen to it before claiming voice quality.
+
 ## Change checklist
 
 - Env var changed: update `config.py`, `.env.example`, README config table, tests.

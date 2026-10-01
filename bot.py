@@ -9,6 +9,7 @@ from contextlib import suppress
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from html import escape
+from io import BytesIO
 from time import monotonic
 from types import SimpleNamespace
 from typing import Any
@@ -37,7 +38,7 @@ from telegram.ext import (
 )
 
 from config import settings
-from services import memory, notion_memory, profile_rebuild, roast
+from services import memory, notion_memory, profile_rebuild, roast, speech
 from services.diary_dates import diary_today
 from services.formatter import edit_entry_draft, format_entry
 from services.i18n import (
@@ -187,6 +188,7 @@ COMMANDS: tuple[tuple[str, str], ...] = (
     ("help", "Commands and buttons"),
     ("diary", "Switch to Diary mode"),
     ("chat", "Switch to Chat mode (roast prompt)"),
+    ("voice", "Toggle audio replies for Roast and Chat"),
     ("weekly", "Weekly report now"),
     ("stat", "Saved audio minutes"),
     ("memory", "Rebuild author profile from all notes"),
@@ -900,30 +902,82 @@ async def _deliver_roast(
 ):
     """Send the latest assistant turn (chain[-1]) as Telegram message(s) and map every
     delivered message id to the full chain so the user can reply to continue it."""
-    chunks = _split_message(chain[-1]["content"])
-    sent_messages = []
     reply_markup = _roast_action_keyboard(language, voting=session_id is not None)
+    sent_messages = []
+    try:
+        if state_store.get_voice_mode(_message_chat_id(reply_target)):
+            await _deliver_roast_voice(
+                reply_target, chain[-1]["content"], context, status_message,
+                reply_markup, language, sent_messages,
+            )
+        else:
+            await _deliver_roast_text(
+                reply_target, _split_message(chain[-1]["content"]), context,
+                status_message, reply_markup, sent_messages,
+            )
+    finally:
+        for message in sent_messages:
+            _store_roast_chain(_message_chat_id(message), message.message_id, chain)
+        if sent_messages and roast.is_multimodel_configured() and model and prompt_chain is not None:
+            _register_roast_option_messages(
+                sent_messages, model, chain[-1]["content"], prompt_chain,
+                session_id, memory_context,
+            )
+    return sent_messages[-1]
+
+
+async def _deliver_roast_text(reply_target, chunks, context, status_message, reply_markup, sent_messages):
     for index, chunk in enumerate(chunks):
+        kwargs = {"reply_markup": reply_markup} if reply_markup is not None else {}
         if index == 0 and status_message is not None:
-            kwargs = {"reply_markup": reply_markup} if reply_markup is not None else {}
             await _edit_reply_message(context, status_message, chunk, **kwargs)
             sent_messages.append(status_message)
         else:
             target = sent_messages[-1] if sent_messages else reply_target
-            kwargs = {"reply_markup": reply_markup} if reply_markup is not None else {}
             sent_messages.append(await _reply_to_source(target, chunk, **kwargs))
-    for message in sent_messages:
-        _store_roast_chain(_message_chat_id(message), message.message_id, chain)
-    if roast.is_multimodel_configured() and model and prompt_chain is not None:
-        _register_roast_option_messages(
-            sent_messages,
-            model,
-            chain[-1]["content"],
-            prompt_chain,
-            session_id,
-            memory_context,
+    return sent_messages
+
+
+async def _deliver_roast_voice(reply_target, text, context, status_message, reply_markup, language, sent_messages):
+    chunks = speech.split_speech(text)
+    try:
+        if not chunks:
+            raise ValueError("Empty speech input")
+        audio_chunks = [await speech.synthesize(chunk) for chunk in chunks]
+    except Exception:
+        logger.exception("Speech synthesis failed")
+        return await _deliver_roast_text(
+            reply_target, _split_message(t("voice.fallback", language) + "\n\n" + text),
+            context, status_message, reply_markup, sent_messages,
         )
-    return sent_messages[-1]
+    try:
+        for index, audio in enumerate(audio_chunks):
+            target = sent_messages[-1] if sent_messages else reply_target
+            with BytesIO(audio) as voice:
+                voice.name = "reply.ogg"
+                try:
+                    sent = await context.bot.send_voice(
+                        chat_id=_message_chat_id(target), voice=voice,
+                        reply_parameters=ReplyParameters(
+                            message_id=target.message_id, allow_sending_without_reply=True,
+                        ), reply_markup=reply_markup,
+                    )
+                except Exception:
+                    logger.exception("Voice delivery failed")
+                    remaining = "\n\n".join(chunks[index:])
+                    await _deliver_roast_text(
+                        target, _split_message(t("voice.fallback", language) + "\n\n" + remaining),
+                        context, None, reply_markup, sent_messages,
+                    )
+                    break
+            sent_messages.append(sent)
+    finally:
+        if status_message is not None and sent_messages:
+            with suppress(Exception):
+                await context.bot.delete_message(
+                    chat_id=_message_chat_id(status_message), message_id=status_message.message_id,
+                )
+    return sent_messages
 
 
 async def _sync_author_memory() -> None:
@@ -1728,6 +1782,19 @@ async def handle_chat_mode(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         t("mode.chat_enabled", language),
         reply_markup=_main_reply_keyboard(MODE_CHAT, language),
     )
+
+
+async def handle_voice_mode(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    message = update.effective_message
+    chat_id = _message_chat_id(message)
+    language = _message_language(update=update)
+    args = context.args or []
+    if len(args) > 1 or (args and args[0].lower() not in {"on", "off"}):
+        await message.reply_text(t("voice.usage", language))
+        return
+    enabled = args[0].lower() == "on" if args else not state_store.get_voice_mode(chat_id)
+    state_store.set_voice_mode(chat_id, enabled)
+    await message.reply_text(t("voice.enabled" if enabled else "voice.disabled", language))
 
 
 async def handle_rules(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2846,6 +2913,7 @@ def main() -> None:
         CommandHandler("help", handle_help, filters=user_filter),
         CommandHandler("diary", handle_diary_mode, filters=user_filter),
         CommandHandler("chat", handle_chat_mode, filters=user_filter),
+        CommandHandler("voice", handle_voice_mode, filters=user_filter),
         CommandHandler("weekly", handle_weekly, filters=user_filter),
         CommandHandler("stat", handle_stat, filters=user_filter),
         CommandHandler("memory", handle_memory, filters=user_filter),

@@ -11,6 +11,12 @@ projects:
         command: 'bash -c "systemctl --user stop diary-bot.service 2>/dev/null || true; exec bash scripts/bot-watch.sh"'
         autoStart: false
         idleTtlMinutes: 999999
+      check:
+        command: bash scripts/check-sidecar.sh
+        autoStart: false
+      speech-check:
+        command: bash scripts/check-sidecar.sh --speech
+        autoStart: false
     sources:
       gh:
         type: github

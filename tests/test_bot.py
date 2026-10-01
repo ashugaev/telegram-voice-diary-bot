@@ -1288,7 +1288,7 @@ class MainRegistrationTests(unittest.TestCase):
 
         self.assertEqual(
             set(command_filters),
-            {"start", "help", "diary", "chat", "weekly", "stat", "memory", "rules", "lang"},
+            {"start", "help", "diary", "chat", "voice", "weekly", "stat", "memory", "rules", "lang"},
         )
         self.assertEqual(set(command_filters), {name for name, _ in bot.COMMANDS})
         for command, command_filter in command_filters.items():

@@ -360,6 +360,16 @@ class StateStore:
         modes[str(chat_id)] = target_mode
         self._save()
 
+    def get_voice_mode(self, chat_id: int) -> bool:
+        return self.data.get("voice_modes", {}).get(str(chat_id), False) is True
+
+    def set_voice_mode(self, chat_id: int, enabled: bool) -> None:
+        modes = self.data.setdefault("voice_modes", {})
+        if modes.get(str(chat_id)) is enabled:
+            return
+        modes[str(chat_id)] = enabled
+        self._save()
+
     def remove_draft(self, entry_id: str) -> None:
         self.data["drafts"].pop(entry_id, None)
         self._save()

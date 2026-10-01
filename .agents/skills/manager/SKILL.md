@@ -38,13 +38,13 @@ Coordinate workflow. Delegate work to agents and skills; aggregate results. Use 
 2. Score: use `shallow-scoring` from task text.
 3. Route: build gate list from the table above.
 4. Execute: run one gate at a time. If a gate returns `CHANGES_REQUESTED` or `FAIL`, developer fixes once, then rerun that gate once.
-5. Validate: code changes require local tests. Use `make test` unless dependencies are unavailable; report any gap.
+5. Validate: code changes require targeted tests, then fresh production-isolated sidecar `make test` before merge. Inspect sidecar command/state/credentials first. Changed behavior needs evidence; failing or missing required checks block release.
 6. Close: run `self-verify` and report completed work, checks, risks, and missing evidence.
 7. Deliver: from a feature branch (never `main`), commit, push, `gh pr create`, then `gh pr checks --watch`; merge with `gh pr merge --squash --delete-branch` once green — no confirmation. Docs-only changes may merge without waiting for CI. On red CI, `developer` fixes once, rerun the gate, push, re-watch; never merge on red/pending. Skip only if `gh` is unavailable or the user opted out — note it.
 
 ## Rules
 
-- Never run live Telegram, OpenAI, Notion, SSH, `make dev`, or `make deploy` unless user explicitly requests production work.
+- Live APIs require explicit authorization. A scoped isolated API check authorizes only that API; never start a production poller, SSH, `make dev`, or `make deploy` without explicit production authorization.
 - Keep hooks local-only: syntax/frontmatter/compile checks are allowed; push, deploy, live API calls, and production state mutation are not.
 - Default close-out merges the PR autonomously once CI is green (docs-only may skip CI); never merge on red/pending, push to `main`, force-push, or deploy.
 - Mirror durable instruction changes across `AGENTS.md` and `CLAUDE.md`.

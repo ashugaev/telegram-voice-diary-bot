@@ -32,6 +32,8 @@ All optional — sensible defaults are used when unset.
 | `OPENAI_FORMATTER_MODEL` | Formatting (OpenAI mode) | `gpt-6-astra` |
 | `OPENAI_SUMMARY_MODEL` | Summaries (OpenAI mode) | `OPENAI_FORMATTER_MODEL` |
 | `OPENAI_PROFILE_MODEL` | Author profile (OpenAI mode) | `OPENAI_SUMMARY_MODEL` |
+| `OPENAI_TTS_MODEL` | OpenAI speech, all chat providers | `gpt-4o-mini-tts` |
+| `OPENAI_TTS_VOICE` | Voice for Roast/Chat audio replies | `cedar` |
 | `OPENAI_ROAST_MODEL` | Roast (OpenAI mode) | `gpt-6-astra` |
 | `ANTHROPIC_FORMATTER_MODEL` | Formatting (Anthropic mode) | `claude-opus-5` |
 | `ANTHROPIC_SUMMARY_MODEL` | Summaries (Anthropic mode) | `ANTHROPIC_FORMATTER_MODEL` |
@@ -46,6 +48,8 @@ All optional — sensible defaults are used when unset.
 | `OPENROUTER_PROVIDER_ORDER` | Preferred provider order | `Anthropic` |
 | `OPENROUTER_DATA_COLLECTION` | Data retention policy | `deny` |
 | `OPENROUTER_ALLOW_FALLBACKS` | Allow fallback providers | `false` |
+
+`/voice` toggles Roast/Chat audio replies per chat. `/voice on` and `/voice off` set it explicitly. Default off. Uses the existing OpenAI key, Opus voice notes, and expressive speech instructions. Cedar and Marin are OpenAI recommended quality voices. Audio is AI-generated; synthesis/send errors fall back to text. See [OpenAI speech guide](https://developers.openai.com/api/docs/guides/text-to-speech).
 
 ## Switching AI provider
 

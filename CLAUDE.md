@@ -43,6 +43,7 @@ Capabilities loaded by description match. Source: [.claude/skills/](.claude/skil
 - English-only repo: author all code, comments, identifiers, user-facing strings, docs, tests, commit messages, PR titles/bodies, and git interactions in English. Make AI response language a runtime setting (e.g. `ROAST_LANGUAGE`) instead of hardcoding a non-English prompt.
 - Prefer the repo's current Python style: small functions, explicit constants, `unittest`, async tests via `unittest.IsolatedAsyncioTestCase`.
 - Run `make test` before sign-off for code changes. For narrow edits, run the targeted `python -m unittest ...` first, then `make test`.
+- Before merge, run fresh production-isolated sidecar checks. Inspect its command first: test credentials, temporary state, no poller or service commands. Release only checked behavior; report missing evidence.
 - Tests must be offline. Mock Telegram, OpenAI, Notion, network, filesystem state, and sleeps at the changed boundary.
 - Keep secrets in `.env`; never commit tokens, chat IDs beyond test values, API keys, Notion IDs, or production state.
 - Do not run `make dev`, `make deploy`, or `systemctl --user` commands unless the user explicitly asks. They stop/restart the live bot service.
