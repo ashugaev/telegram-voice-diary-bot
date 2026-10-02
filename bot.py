@@ -26,6 +26,7 @@ from telegram import (
     InlineKeyboardMarkup,
 )
 from telegram.constants import ChatAction
+from telegram.error import BadRequest
 from telegram.ext import (
     Application,
     ApplicationBuilder,
@@ -962,11 +963,17 @@ async def _deliver_roast_voice(reply_target, text, context, status_message, repl
                             message_id=target.message_id, allow_sending_without_reply=True,
                         ), reply_markup=reply_markup,
                     )
-                except Exception:
+                except Exception as error:
                     logger.exception("Voice delivery failed")
+                    fallback_key = (
+                        "voice.privacy_blocked"
+                        if isinstance(error, BadRequest)
+                        and str(error).strip().casefold() == "voice_messages_forbidden"
+                        else "voice.fallback"
+                    )
                     remaining = "\n\n".join(chunks[index:])
                     await _deliver_roast_text(
-                        target, _split_message(t("voice.fallback", language) + "\n\n" + remaining),
+                        target, _split_message(t(fallback_key, language) + "\n\n" + remaining),
                         context, None, reply_markup, sent_messages,
                     )
                     break
@@ -1632,6 +1639,10 @@ async def post_init(application: Application) -> None:
         [BotCommand(name, t(description, DEFAULT_LANGUAGE)) for name, description in COMMANDS]
     )
     try:
+        await _set_chat_commands(application, settings.allowed_user_id, _message_language())
+    except Exception:
+        logger.exception("Failed to refresh the chat command menu")
+    try:
         await notion_memory.ensure_memory_pages()
     except Exception:
         logger.exception("Failed to ensure the Notion memory pages exist")
@@ -1794,6 +1805,10 @@ async def handle_voice_mode(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
     enabled = args[0].lower() == "on" if args else not state_store.get_voice_mode(chat_id)
     state_store.set_voice_mode(chat_id, enabled)
+    try:
+        await _set_chat_commands(context, chat_id, language)
+    except Exception:
+        logger.exception("Failed to refresh the chat command menu")
     await message.reply_text(t("voice.enabled" if enabled else "voice.disabled", language))
 
 

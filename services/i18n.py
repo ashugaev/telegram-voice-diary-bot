@@ -584,6 +584,10 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en": "Use /voice to toggle, /voice on, or /voice off.",
         "ru": "Use /voice to toggle, /voice on, or /voice off.",
     },
+    "voice.privacy_blocked": {
+        "en": "Telegram privacy settings block voice messages from this bot. In Settings > Privacy and Security > Voice Messages, allow this bot. Sending text instead.",
+        "ru": "Telegram privacy settings block voice messages from this bot. In Settings > Privacy and Security > Voice Messages, allow this bot. Sending text instead.",
+    },
     "voice.fallback": {
         "en": "Audio unavailable. Sending text instead.",
         "ru": "Audio unavailable. Sending text instead.",
