@@ -951,32 +951,47 @@ async def _deliver_roast_voice(reply_target, text, context, status_message, repl
             reply_target, _split_message(t("voice.fallback", language) + "\n\n" + text),
             context, status_message, reply_markup, sent_messages,
         )
+    audio_mode = False
     try:
         for index, audio in enumerate(audio_chunks):
             target = sent_messages[-1] if sent_messages else reply_target
-            with BytesIO(audio) as voice:
-                voice.name = "reply.ogg"
-                try:
-                    sent = await context.bot.send_voice(
-                        chat_id=_message_chat_id(target), voice=voice,
-                        reply_parameters=ReplyParameters(
-                            message_id=target.message_id, allow_sending_without_reply=True,
-                        ), reply_markup=reply_markup,
-                    )
-                except Exception as error:
-                    logger.exception("Voice delivery failed")
-                    fallback_key = (
-                        "voice.privacy_blocked"
-                        if isinstance(error, BadRequest)
-                        and str(error).strip().casefold() == "voice_messages_forbidden"
-                        else "voice.fallback"
-                    )
-                    remaining = "\n\n".join(chunks[index:])
-                    await _deliver_roast_text(
-                        target, _split_message(t(fallback_key, language) + "\n\n" + remaining),
-                        context, None, reply_markup, sent_messages,
-                    )
-                    break
+            try:
+                if not audio_mode:
+                    with BytesIO(audio) as voice:
+                        voice.name = "reply.ogg"
+                        try:
+                            sent = await context.bot.send_voice(
+                                chat_id=_message_chat_id(target), voice=voice,
+                                reply_parameters=ReplyParameters(
+                                    message_id=target.message_id, allow_sending_without_reply=True,
+                                ), reply_markup=reply_markup,
+                            )
+                        except BadRequest as error:
+                            if str(error).strip().casefold() not in {
+                                "voice_messages_forbidden",
+                                "user restricted receiving of voice note messages",
+                            }:
+                                raise
+                            audio_mode = True
+                if audio_mode:
+                    audio = await speech.synthesize(chunks[index], response_format="mp3")
+                    with BytesIO(audio) as recording:
+                        recording.name = "reply.mp3"
+                        sent = await context.bot.send_audio(
+                            chat_id=_message_chat_id(target), audio=recording,
+                            reply_parameters=ReplyParameters(
+                                message_id=target.message_id, allow_sending_without_reply=True,
+                            ), reply_markup=reply_markup,
+                        )
+            except Exception:
+                logger.exception("Audio delivery failed")
+                fallback_key = "voice.privacy_blocked" if audio_mode else "voice.fallback"
+                remaining = "\n\n".join(chunks[index:])
+                await _deliver_roast_text(
+                    target, _split_message(t(fallback_key, language) + "\n\n" + remaining),
+                    context, None, reply_markup, sent_messages,
+                )
+                break
             sent_messages.append(sent)
     finally:
         if status_message is not None and sent_messages:
