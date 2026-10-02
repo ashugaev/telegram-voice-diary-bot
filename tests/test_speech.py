@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, call, patch
 
 os.environ.setdefault("TELEGRAM_TOKEN", "test-token")
 os.environ.setdefault("OPENAI_API_KEY", "test-openai-key")
@@ -29,6 +29,13 @@ class SpeechTests(unittest.IsolatedAsyncioTestCase):
             input="Hello", instructions=speech.VOICE_INSTRUCTIONS, response_format="opus",
         ))
 
+    async def test_mp3_speech_arguments(self):
+        create = AsyncMock(return_value=SimpleNamespace(content=b"mp3"))
+        client = SimpleNamespace(audio=SimpleNamespace(speech=SimpleNamespace(create=create)))
+        with patch.object(speech, "client", client):
+            self.assertEqual(await speech.synthesize("Hello", response_format="mp3"), b"mp3")
+        self.assertEqual(create.await_args.kwargs["response_format"], "mp3")
+
     def test_unicode_and_boundaries(self):
         for text in ["界🙂" * 1200, "A sentence. " * 700, "paragraph\n\n" * 400, "word " * 1500]:
             chunks = speech.split_speech(text)
@@ -50,6 +57,7 @@ class VoiceFlowTests(unittest.IsolatedAsyncioTestCase):
         bot._chat_mode_chains.clear()
         self.client = SimpleNamespace(
             send_voice=AsyncMock(side_effect=self.sent_voice),
+            send_audio=AsyncMock(side_effect=self.sent_audio),
             send_message=AsyncMock(side_effect=self.sent_text),
             edit_message_text=AsyncMock(), delete_message=AsyncMock(), set_my_commands=AsyncMock(),
         )
@@ -66,6 +74,10 @@ class VoiceFlowTests(unittest.IsolatedAsyncioTestCase):
 
     async def sent_voice(self, **kwargs):
         self.audio.append((kwargs["voice"].name, kwargs["voice"].getvalue()))
+        return self.message()
+
+    async def sent_audio(self, **kwargs):
+        self.audio.append((kwargs["audio"].name, kwargs["audio"].getvalue()))
         return self.message()
 
     async def sent_text(self, **kwargs):
@@ -112,29 +124,105 @@ class VoiceFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Audio unavailable", self.client.edit_message_text.await_args.kwargs["text"])
 
     async def test_privacy_error_first_and_later_chunks_preserves_metadata(self):
-        for prefix in (False, True):
-            with self.subTest(prefix=prefix):
+        errors = (
+            " Voice_messages_forbidden ",
+            " User restricted receiving of voice note messages ",
+        )
+        for error in errors:
+            for prefix in (False, True):
+                with self.subTest(error=error, prefix=prefix):
+                    bot._roast_chains.clear()
+                    self.client.send_message.reset_mock()
+                    self.client.send_voice.reset_mock()
+                    self.client.send_audio.reset_mock()
+                    self.audio.clear()
+                    first = self.message()
+                    self.client.send_voice.side_effect = (
+                        [first, BadRequest(error)] if prefix else [BadRequest(error)]
+                    )
+                    self.chain[-1]["content"] = "first second third"
+                    with patch.object(speech, "split_speech", return_value=["first", "second", "third"]), \
+                            patch.object(speech, "synthesize", AsyncMock(return_value=b"audio")) as synth, \
+                            patch.object(bot.roast, "is_multimodel_configured", return_value=True), \
+                            patch.object(bot, "_register_roast_option_messages") as register:
+                        last = await bot._deliver_roast(self.source, self.chain, self.context,
+                            self.status, model="model", prompt_chain=[], session_id="session")
+                    self.client.send_message.assert_not_awaited()
+                    self.assertEqual(self.client.send_voice.await_count, 2 if prefix else 1)
+                    expected_chunks = ["second", "third"] if prefix else ["first", "second", "third"]
+                    self.assertEqual(synth.await_args_list[3:], [
+                        call(chunk, response_format="mp3") for chunk in expected_chunks
+                    ])
+                    self.assertEqual(self.audio, [("reply.mp3", b"audio")] * len(expected_chunks))
+                    audio_calls = self.client.send_audio.await_args_list
+                    self.assertEqual(audio_calls[0].kwargs["reply_parameters"].message_id,
+                        first.message_id if prefix else 10)
+                    self.assertEqual(audio_calls[-1].kwargs["reply_parameters"].message_id,
+                        last.message_id - 1)
+                    for audio_call in audio_calls:
+                        self.assertEqual(audio_call.kwargs["reply_markup"].inline_keyboard[0][0].callback_data, "vote")
+                    self.assertEqual(len(bot._roast_chains), 3)
+                    self.assertTrue(all(chain == self.chain for chain in bot._roast_chains.values()))
+                    messages = register.call_args.args[0]
+                    self.assertEqual(len(messages), 3)
+                    if prefix:
+                        self.assertIs(messages[0], first)
+                    self.assertEqual(register.call_args.args[2], "first second third")
+                    self.client.delete_message.assert_awaited_with(chat_id=1, message_id=11)
+                    self.assertTrue(self.store.get_voice_mode(1))
+
+    async def test_first_mp3_failure_falls_back_all_chunks(self):
+        for failure in ("synthesis", "delivery"):
+            with self.subTest(failure=failure):
+                self.client.send_message.reset_mock()
+                self.client.send_voice.reset_mock()
+                self.client.send_audio.reset_mock()
+                self.client.send_voice.side_effect = BadRequest("VOICE_MESSAGES_FORBIDDEN")
+                self.client.send_audio.side_effect = RuntimeError("MP3 failed")
+                synth = AsyncMock(side_effect=[b"opus", b"opus", RuntimeError("MP3 failed")]) \
+                    if failure == "synthesis" else AsyncMock(return_value=b"audio")
+                with patch.object(speech, "split_speech", return_value=["first", "second"]), \
+                        patch.object(speech, "synthesize", synth):
+                    await bot._deliver_roast(self.source, self.chain, self.context, self.status)
+                self.client.send_voice.assert_awaited_once()
+                text = self.client.send_message.await_args.kwargs["text"]
+                self.assertIn("Privacy and Security > Voice Messages", text)
+                self.assertIn("first", text)
+                self.assertIn("second", text)
+
+    async def test_mp3_failure_after_audio_prefix_preserves_unsent_text(self):
+        for failure in ("synthesis", "delivery"):
+            with self.subTest(failure=failure):
                 bot._roast_chains.clear()
                 self.client.send_message.reset_mock()
-                self.client.send_voice.side_effect = (
-                    [self.message(), BadRequest(" Voice_messages_forbidden ")]
-                    if prefix else [BadRequest("Voice_messages_forbidden")]
+                self.client.send_voice.reset_mock()
+                self.client.send_audio.reset_mock()
+                first = self.message()
+                second = self.message()
+                self.client.send_voice.side_effect = [first, BadRequest(
+                    "User restricted receiving of voice note messages")]
+                self.client.send_audio.side_effect = (
+                    [second, RuntimeError("MP3 failed")] if failure == "delivery" else [second]
                 )
-                self.chain[-1]["content"] = "first second"
-                with patch.object(speech, "split_speech", return_value=["first", "second"]), \
-                        patch.object(speech, "synthesize", AsyncMock(return_value=b"opus")), \
+                synth = AsyncMock(side_effect=[b"opus"] * 3 + [b"mp3", RuntimeError("MP3 failed")]) \
+                    if failure == "synthesis" else AsyncMock(return_value=b"audio")
+                with patch.object(speech, "split_speech", return_value=["first", "second", "third"]), \
+                        patch.object(speech, "synthesize", synth), \
                         patch.object(bot.roast, "is_multimodel_configured", return_value=True), \
                         patch.object(bot, "_register_roast_option_messages") as register:
                     last = await bot._deliver_roast(self.source, self.chain, self.context,
                         self.status, model="model", prompt_chain=[], session_id="session")
+                self.assertEqual(self.client.send_voice.await_count, 2)
                 kwargs = self.client.send_message.await_args.kwargs
                 self.assertIn("Privacy and Security > Voice Messages", kwargs["text"])
-                self.assertIn("second", kwargs["text"])
-                self.assertEqual("first" in kwargs["text"], not prefix)
+                self.assertIn("third", kwargs["text"])
+                self.assertNotIn("first", kwargs["text"])
+                self.assertNotIn("second", kwargs["text"])
+                self.assertEqual(kwargs["reply_parameters"].message_id, second.message_id)
                 self.assertEqual(kwargs["reply_markup"].inline_keyboard[0][0].callback_data, "vote")
-                self.assertEqual(bot._roast_chains[f"1:{last.message_id}"], self.chain)
-                self.assertEqual(register.call_args.args[2], "first second")
-                self.assertEqual(len(register.call_args.args[0]), 2 if prefix else 1)
+                self.assertEqual(register.call_args.args[0], [first, second, last])
+                self.assertEqual(len(bot._roast_chains), 3)
+                self.assertTrue(all(chain == self.chain for chain in bot._roast_chains.values()))
 
     async def test_unrelated_bad_request_keeps_generic_fallback(self):
         for prefix in (False, True):
@@ -145,6 +233,7 @@ class VoiceFlowTests(unittest.IsolatedAsyncioTestCase):
                         patch.object(speech, "synthesize", AsyncMock(return_value=b"opus")):
                     await bot._deliver_roast(self.source, self.chain, self.context)
                 text = self.client.send_message.await_args.kwargs["text"]
+                self.client.send_audio.assert_not_awaited()
                 self.assertIn("Audio unavailable", text)
                 self.assertNotIn("Privacy", text)
                 self.assertEqual("first" in text, not prefix)

@@ -33,12 +33,12 @@ def split_speech(text: str) -> list[str]:
     return chunks
 
 
-async def synthesize(text: str) -> bytes:
+async def synthesize(text: str, *, response_format: str = "opus") -> bytes:
     response = await client.audio.speech.create(
         model=settings.openai_tts_model,
         voice=settings.openai_tts_voice,
         input=text,
         instructions=VOICE_INSTRUCTIONS,
-        response_format="opus",
+        response_format=response_format,
     )
     return response.content
