@@ -45,6 +45,8 @@ The bot publishes this list to Telegram on startup, so typing `/` in the chat sh
 
 Voice replies use OpenAI speech (`gpt-4o-mini-tts`, `cedar`) with the existing `OPENAI_API_KEY`, even with another chat provider. Override `OPENAI_TTS_MODEL` and `OPENAI_TTS_VOICE` in `.env`. Replies arrive as Telegram voice notes; long replies split into parts. Speech errors fall back to text. Diary previews and memory notes stay text. Voice preference persists per chat, independently of Diary/Chat mode; default off.
 
+Telegram voice privacy restrictions produce text with instructions to allow the bot under Settings > Privacy and Security > Voice Messages. Startup and valid `/voice` commands refresh the chat command menu.
+
 ## Docs
 
 - **[Usage](docs/usage.md)** — preview & editing, roast mode, behavior rules, author profile, tags, summaries.

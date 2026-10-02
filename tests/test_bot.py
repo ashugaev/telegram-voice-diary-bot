@@ -1379,7 +1379,9 @@ class PostInitTests(unittest.IsolatedAsyncioTestCase):
         application = self._application()
         replayed = []
 
-        with patch.object(bot.notion_memory, "ensure_memory_pages", new=AsyncMock()) as ensure, \
+        with patch.object(bot.state_store, "get_saved_language", return_value="en"), \
+                patch.object(bot.notion_memory, "ensure_memory_pages", new=AsyncMock()) as ensure, \
+                patch.object(bot, "_sync_memory", AsyncMock()), \
                 patch.object(bot, "replay_unprocessed_messages", new=AsyncMock(side_effect=replayed.append)):
             await bot.post_init(application)
 
@@ -1389,6 +1391,34 @@ class PostInitTests(unittest.IsolatedAsyncioTestCase):
         )
         ensure.assert_awaited_once_with()
         self.assertEqual(replayed, [application])
+
+    async def test_startup_refreshes_chat_scope_in_saved_language(self):
+        application = SimpleNamespace(bot=SimpleNamespace(set_my_commands=AsyncMock()))
+        with patch.object(bot.state_store, "get_saved_language", return_value="ru"), \
+                patch.object(bot.notion_memory, "ensure_memory_pages", AsyncMock()), \
+                patch.object(bot, "_sync_memory", AsyncMock()), \
+                patch.object(bot, "replay_unprocessed_messages", AsyncMock()) as replay:
+            await bot.post_init(application)
+        calls = application.bot.set_my_commands.await_args_list
+        scoped = calls[-1]
+        self.assertEqual(scoped.kwargs["scope"].chat_id, bot.settings.allowed_user_id)
+        self.assertEqual([(c.command, c.description) for c in scoped.args[0]],
+            [(name, bot.t(description, "ru")) for name, description in bot.COMMANDS])
+        self.assertIn("voice", [c.command for c in scoped.args[0]])
+        self.assertEqual(len(calls), len(bot.SUPPORTED_LANGUAGES) + 2)
+        replay.assert_awaited_once_with(application)
+
+    async def test_chat_menu_failure_never_blocks_startup_replay(self):
+        application = SimpleNamespace(bot=SimpleNamespace(set_my_commands=AsyncMock()))
+        with patch.object(bot, "_set_chat_commands", AsyncMock(side_effect=RuntimeError("menu failed"))), \
+                patch.object(bot.notion_memory, "ensure_memory_pages", AsyncMock()), \
+                patch.object(bot, "_sync_memory", AsyncMock()) as sync, \
+                patch.object(bot, "replay_unprocessed_messages", AsyncMock()) as replay, \
+                patch.object(bot.logger, "exception") as log:
+            await bot.post_init(application)
+        sync.assert_awaited_once()
+        replay.assert_awaited_once_with(application)
+        log.assert_called_once()
 
     async def test_post_init_still_replays_when_notion_is_unreachable(self):
         application = self._application()
@@ -1400,6 +1430,7 @@ class PostInitTests(unittest.IsolatedAsyncioTestCase):
                     new=AsyncMock(side_effect=RuntimeError("notion down")),
                 ), \
                 patch.object(bot.logger, "exception"), \
+                patch.object(bot, "_sync_memory", AsyncMock()), \
                 patch.object(bot, "replay_unprocessed_messages", new=AsyncMock(side_effect=replayed.append)):
             await bot.post_init(application)
 
