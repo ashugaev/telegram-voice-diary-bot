@@ -43,6 +43,8 @@ You'll need a Telegram bot token, an OpenAI API key, and a Notion integration + 
 
 The bot publishes this list to Telegram on startup, so typing `/` in the chat shows it.
 
+OpenAI text tasks default to `gpt-6.1-sol`. Override `OPENAI_FORMATTER_MODEL`, `OPENAI_SUMMARY_MODEL`, `OPENAI_PROFILE_MODEL`, and `OPENAI_ROAST_MODEL` in `.env`. Summary inherits the formatter model; profile inherits the summary model when unset.
+
 Voice replies use OpenAI speech (`gpt-4o-mini-tts`, `cedar`) with the existing `OPENAI_API_KEY`, even with another chat provider. Override `OPENAI_TTS_MODEL` and `OPENAI_TTS_VOICE` in `.env`. Replies arrive as Telegram voice notes; long replies split into parts. Speech errors fall back to text. Diary previews and memory notes stay text. Voice preference persists per chat, independently of Diary/Chat mode; default off.
 
 Telegram voice privacy restrictions switch the remaining reply parts to MP3 audio files. If audio delivery also fails, text includes the unsent parts and instructions to allow the bot under Settings > Privacy and Security > Voice Messages. Startup and valid `/voice` commands refresh the chat command menu.
