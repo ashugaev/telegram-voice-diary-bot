@@ -1,4 +1,5 @@
 import os
+import runpy
 import unittest
 from unittest.mock import patch
 
@@ -38,6 +39,38 @@ class ConfigValidationTests(unittest.TestCase):
             self.assertEqual(config._optional_env("OPENAI_ROAST_MODEL", "gpt-5.4"), "gpt-5.4")
         with patch.dict(os.environ, {}, clear=True):
             self.assertEqual(config._optional_env("OPENAI_ROAST_MODEL", "gpt-5.4"), "gpt-5.4")
+
+    def test_openai_text_model_defaults_and_overrides(self):
+        test_env = {
+            "PYTHON_DOTENV_DISABLED": "1",
+            "TELEGRAM_TOKEN": "test-token",
+            "OPENAI_API_KEY": "test-openai-key",
+            "NOTION_TOKEN": "test-notion-token",
+            "NOTION_DATABASE_ID": "test-notion-db",
+            "ALLOWED_USER_ID": "1",
+        }
+        cases = (
+            ({}, ("gpt-6.1-sol",) * 4),
+            ({"OPENAI_FORMATTER_MODEL": "custom-formatter"},
+             ("custom-formatter",) * 3 + ("gpt-6.1-sol",)),
+            ({"OPENAI_SUMMARY_MODEL": "custom-summary", "OPENAI_ROAST_MODEL": "custom-roast"},
+             ("gpt-6.1-sol", "custom-summary", "custom-summary", "custom-roast")),
+            ({"OPENAI_PROFILE_MODEL": "custom-profile"},
+             ("gpt-6.1-sol", "gpt-6.1-sol", "custom-profile", "gpt-6.1-sol")),
+            ({name: "" for name in (
+                "OPENAI_FORMATTER_MODEL", "OPENAI_SUMMARY_MODEL",
+                "OPENAI_PROFILE_MODEL", "OPENAI_ROAST_MODEL",
+            )}, ("gpt-6.1-sol",) * 4),
+        )
+        for overrides, expected in cases:
+            with self.subTest(overrides=overrides):
+                with patch.dict(os.environ, test_env | overrides, clear=True):
+                    settings = runpy.run_path(config.__file__)["settings"]
+                self.assertEqual(tuple(getattr(settings, name) for name in (
+                    "formatter_model", "summary_model", "profile_model", "roast_model",
+                )), expected)
+                self.assertEqual(settings.openai_transcription_model, "whisper-1")
+                self.assertEqual(settings.openai_tts_model, "gpt-4o-mini-tts")
 
     def test_diary_day_start_hour_defaults_to_midnight(self):
         with patch.dict(os.environ, {}, clear=True):
