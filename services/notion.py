@@ -563,6 +563,32 @@ async def create_page(
         return SaveResult(page_id=page_id, created=True)
 
 
+async def update_entry_date(page_id: str, entry_date: str) -> None:
+    """Moves a saved diary row to another day."""
+    notion_entry_date = _notion_entry_date(entry_date)
+    async with httpx.AsyncClient(timeout=NOTION_TIMEOUT) as http:
+        schema = await ensure_database_schema(http)
+        await _request_with_retry(
+            http,
+            "patch",
+            f"{API}/pages/{page_id}",
+            json={"properties": {
+                schema.created: {"date": {"start": notion_entry_date}},
+                schema.day: {"select": {"name": notion_entry_date}},
+            }},
+        )
+
+
+async def archive_page(page_id: str) -> None:
+    """Moves a saved diary row to Notion trash."""
+    async with httpx.AsyncClient(timeout=NOTION_TIMEOUT) as http:
+        await _request_with_retry(http, "patch", f"{API}/pages/{page_id}", json={"archived": True})
+
+
+def page_url(page_id: str) -> str:
+    return f"https://www.notion.so/{page_id.replace('-', '')}"
+
+
 async def get_week_pages() -> list[dict]:
     """Returns all diary pages created in the last 7 days, oldest first."""
     today = diary_today()

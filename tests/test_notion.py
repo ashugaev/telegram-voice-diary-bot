@@ -263,6 +263,23 @@ class NotionSchemaTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(create_payload["properties"]["Audio Duration"], {"number": 42})
         self.assertEqual(create_payload["properties"]["Audio File Size"], {"number": 1000})
 
+    async def test_update_entry_date_patches_created_and_day(self):
+        http = FakeCreatePageHttp()
+        with patch.object(notion.httpx, "AsyncClient", lambda timeout: http):
+            await notion.update_entry_date("page-1", "2026-06-07")
+
+        call = http.patch_calls[-1]
+        self.assertTrue(call["url"].endswith("/pages/page-1"))
+        self.assertEqual(call["json"]["properties"]["Created"], {"date": {"start": "2026-06-07"}})
+        self.assertEqual(call["json"]["properties"]["Day"], {"select": {"name": "2026-06-07"}})
+
+    async def test_archive_page_moves_page_to_trash(self):
+        http = FakeCreatePageHttp()
+        with patch.object(notion.httpx, "AsyncClient", lambda timeout: http):
+            await notion.archive_page("page-1")
+
+        self.assertEqual(http.patch_calls, [{"url": f"{notion.API}/pages/page-1", "json": {"archived": True}}])
+
     async def test_create_page_splits_long_entry_text_into_notion_sized_paragraphs(self):
         http = FakeCreatePageHttp()
         long_text = "x" * (notion.NOTION_TEXT_CHUNK_SIZE + 199)
@@ -484,6 +501,7 @@ class FakeCreatePageHttp:
         self.verified_pages = []
         self.duplicate_id = duplicate_id
         self.post_calls = []
+        self.patch_calls = []
 
     async def __aenter__(self):
         return self
@@ -524,6 +542,10 @@ class FakeCreatePageHttp:
             return FakeResponse({"results": results})
         self.created_pages += 1
         return FakeResponse({"id": "page-1"})
+
+    async def patch(self, url, headers, json):
+        self.patch_calls.append({"url": url, "json": json})
+        return FakeResponse({})
 
 
 class FakeQueryPagesHttp:

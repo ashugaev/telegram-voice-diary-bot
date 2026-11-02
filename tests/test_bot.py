@@ -1159,7 +1159,7 @@ class SaveDraftTests(unittest.IsolatedAsyncioTestCase):
             original_text=None,
         ):
             calls.append((title, text, tags, metadata, entry_date, allow_duplicate, original_text))
-            return SimpleNamespace(created=True)
+            return SimpleNamespace(created=True, page_id="page-1")
 
         with (
             patch.object(bot, "save_entry", new=successful_save_entry),
@@ -1201,7 +1201,7 @@ class SaveDraftTests(unittest.IsolatedAsyncioTestCase):
             original_text=None,
         ):
             calls.append((title, text, tags, metadata, entry_date, allow_duplicate, original_text))
-            return SimpleNamespace(created=True)
+            return SimpleNamespace(created=True, page_id="page-1")
 
         with (
             patch.object(bot, "save_entry", new=successful_save_entry),
@@ -1239,7 +1239,7 @@ class SaveDraftTests(unittest.IsolatedAsyncioTestCase):
             original_text=None,
         ):
             calls.append((title, text, tags, metadata, entry_date, allow_duplicate, original_text))
-            return SimpleNamespace(created=True)
+            return SimpleNamespace(created=True, page_id="page-1")
 
         with (
             patch.object(bot, "save_entry", new=successful_save_entry),
@@ -1249,6 +1249,197 @@ class SaveDraftTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(calls[0][1], "Formatted text")
         self.assertEqual(calls[0][6], "Raw model text")
+
+
+class SavedEntryTests(unittest.IsolatedAsyncioTestCase):
+    def _draft(self, **extra):
+        return {
+            "id": "entry-1",
+            "title": "Title",
+            "text": "Text",
+            "tags": ["work"],
+            "chat_id": 123,
+            "preview_msg_id": 20,
+            "entry_date": bot._default_entry_date(),
+            "message_key": "123:10",
+            "saving": False,
+            **extra,
+        }
+
+    def _callback_update(self, data):
+        return SimpleNamespace(callback_query=FakeQuery(data), effective_message=None, effective_user=None)
+
+    async def test_save_keeps_note_with_post_save_buttons(self):
+        fake_state_store = FakeStateStore()
+        fake_query = FakeQuery()
+        fake_context = SimpleNamespace(user_data={bot.DRAFTS_KEY: {}})
+        draft = self._draft()
+
+        with (
+            patch.object(bot, "save_entry", new=AsyncMock(return_value=SimpleNamespace(created=True, page_id="ab-cd"))),
+            patch.object(bot, "state_store", fake_state_store),
+            patch.object(bot.roast, "is_configured", return_value=True),
+        ):
+            await bot._save_draft(fake_query, fake_context, "entry-1", draft)
+
+        self.assertEqual(draft["page_id"], "ab-cd")
+        self.assertEqual(fake_state_store.saved_drafts[-1]["page_id"], "ab-cd")
+        self.assertEqual(fake_state_store.marked_saved, ["123:10"])
+        self.assertEqual(fake_state_store.removed_drafts, [])
+        final = fake_query.edits[-1]
+        self.assertEqual(final["text"], bot._preview_text("Title", "Text", ["work"], draft["entry_date"]))
+        buttons = [button for row in final["reply_markup"].inline_keyboard for button in row]
+        callbacks = [button.callback_data for button in buttons if button.callback_data]
+        self.assertIn("roast:entry-1", callbacks)
+        self.assertIn("pick_date:entry-1", callbacks)
+        self.assertIn("delete:entry-1", callbacks)
+        self.assertNotIn("save:entry-1", callbacks)
+        self.assertNotIn("cancel:entry-1", callbacks)
+        self.assertIn("https://www.notion.so/abcd", [button.url for button in buttons])
+
+    async def test_saved_note_rejects_save_and_cancel(self):
+        fake_state_store = FakeStateStore()
+        update = self._callback_update("cancel:entry-1")
+        fake_context = SimpleNamespace(user_data={bot.DRAFTS_KEY: {"entry-1": self._draft(page_id="page-1")}})
+
+        with patch.object(bot, "state_store", fake_state_store):
+            await bot.entry_callback(update, fake_context)
+
+        update.callback_query.message.reply_text.assert_awaited_once_with("This note is already saved to Notion.")
+        self.assertEqual(fake_state_store.removed_drafts, [])
+
+    async def test_delete_asks_confirmation_then_archives_page(self):
+        fake_state_store = FakeStateStore()
+        fake_context = SimpleNamespace(user_data={bot.DRAFTS_KEY: {"entry-1": self._draft(page_id="page-1")}})
+        archive = AsyncMock()
+
+        with patch.object(bot, "state_store", fake_state_store), patch.object(bot, "archive_page", archive):
+            ask = self._callback_update("delete:entry-1")
+            await bot.entry_callback(ask, fake_context)
+            archive.assert_not_awaited()
+            keyboard = ask.callback_query.edits[-1]["reply_markup"]
+            self.assertEqual(keyboard.inline_keyboard[0][0].callback_data, "delete_confirm:entry-1")
+
+            confirm = self._callback_update("delete_confirm:entry-1")
+            await bot.entry_callback(confirm, fake_context)
+
+        archive.assert_awaited_once_with("page-1")
+        self.assertEqual(fake_state_store.removed_drafts, ["entry-1"])
+        self.assertEqual(fake_state_store.marked_cancelled, ["123:10"])
+        self.assertNotIn("entry-1", fake_context.user_data[bot.DRAFTS_KEY])
+        self.assertEqual(confirm.callback_query.edits[-1]["text"], "🗑 Deleted from Notion.")
+
+    async def test_unsaved_draft_ignores_delete(self):
+        archive = AsyncMock()
+        update = self._callback_update("delete_confirm:entry-1")
+        fake_context = SimpleNamespace(user_data={bot.DRAFTS_KEY: {"entry-1": self._draft()}})
+
+        with patch.object(bot, "state_store", FakeStateStore()), patch.object(bot, "archive_page", archive):
+            await bot.entry_callback(update, fake_context)
+
+        archive.assert_not_awaited()
+
+    async def test_saved_note_date_change_updates_notion(self):
+        fake_state_store = FakeStateStore()
+        fake_context = SimpleNamespace(bot=FakeEditBot(), user_data={})
+        selected_date = bot._entry_date_options()[1]
+        draft = self._draft(page_id="page-1")
+        update = SimpleNamespace(callback_query=FakeQuery(f"set_date:entry-1:{selected_date}"))
+        update_date = AsyncMock()
+
+        with patch.object(bot, "state_store", fake_state_store), patch.object(bot, "update_entry_date", update_date):
+            await bot._set_entry_date(update, fake_context, draft)
+
+        update_date.assert_awaited_once_with("page-1", selected_date)
+        self.assertEqual(draft["entry_date"], selected_date)
+        self.assertEqual(fake_state_store.saved_drafts[-1]["entry_date"], selected_date)
+
+    async def test_saved_note_date_change_failure_keeps_old_date(self):
+        fake_state_store = FakeStateStore()
+        fake_context = SimpleNamespace(bot=FakeEditBot(), user_data={})
+        old_date = bot._default_entry_date()
+        draft = self._draft(page_id="page-1")
+        update = SimpleNamespace(callback_query=FakeQuery(f"set_date:entry-1:{bot._entry_date_options()[1]}"))
+
+        with (
+            patch.object(bot, "state_store", fake_state_store),
+            patch.object(bot, "update_entry_date", AsyncMock(side_effect=RuntimeError("boom"))),
+            patch.object(bot.logger, "exception"),
+        ):
+            await bot._set_entry_date(update, fake_context, draft)
+
+        self.assertEqual(draft["entry_date"], old_date)
+        self.assertTrue(all(saved["entry_date"] == old_date for saved in fake_state_store.saved_drafts))
+        update.callback_query.message.reply_text.assert_awaited_once_with("Notion not updated: boom")
+        self.assertIn(bot._entry_date_label(old_date), fake_context.bot.edits[-1]["text"])
+
+    async def test_delete_failure_restores_saved_preview(self):
+        fake_state_store = FakeStateStore()
+        fake_context = SimpleNamespace(bot=FakeEditBot(), user_data={bot.DRAFTS_KEY: {"entry-1": self._draft(page_id="page-1")}})
+        update = self._callback_update("delete_confirm:entry-1")
+
+        with (
+            patch.object(bot, "state_store", fake_state_store),
+            patch.object(bot, "archive_page", AsyncMock(side_effect=RuntimeError("boom"))),
+            patch.object(bot.logger, "exception"),
+        ):
+            await bot.entry_callback(update, fake_context)
+
+        draft = fake_context.user_data[bot.DRAFTS_KEY]["entry-1"]
+        self.assertFalse(draft["saving"])
+        self.assertEqual(fake_state_store.removed_drafts, [])
+        update.callback_query.message.reply_text.assert_awaited_once_with("Notion not updated: boom")
+        callbacks = [b.callback_data for row in fake_context.bot.edits[-1]["reply_markup"].inline_keyboard for b in row]
+        self.assertIn("delete:entry-1", callbacks)
+
+    async def test_saved_note_busy_rejects_second_click(self):
+        update = self._callback_update("delete_confirm:entry-1")
+        fake_context = SimpleNamespace(user_data={bot.DRAFTS_KEY: {"entry-1": self._draft(page_id="page-1", saving=True)}})
+        archive = AsyncMock()
+
+        with patch.object(bot, "state_store", FakeStateStore()), patch.object(bot, "archive_page", archive):
+            await bot.entry_callback(update, fake_context)
+
+        archive.assert_not_awaited()
+
+    async def test_reply_edit_rejected_for_saved_note(self):
+        user_msg = SimpleNamespace(reply_text=AsyncMock())
+        update = SimpleNamespace(effective_message=user_msg, effective_chat=SimpleNamespace(id=123))
+        draft = self._draft(page_id="page-1")
+        edit = AsyncMock()
+
+        with patch.object(bot, "state_store", FakeStateStore()), patch.object(bot, "edit_entry_draft", edit):
+            applied = await bot._apply_draft_reply_edit(update, SimpleNamespace(), draft, "shorter")
+
+        self.assertFalse(applied)
+        edit.assert_not_awaited()
+        user_msg.reply_text.assert_awaited_once_with("This note is already saved to Notion.")
+
+    async def test_reply_edit_dropped_when_saved_during_model_call(self):
+        user_msg = SimpleNamespace(reply_text=AsyncMock())
+        update = SimpleNamespace(effective_message=user_msg, effective_chat=SimpleNamespace(id=123))
+        draft = self._draft()
+
+        async def edit_and_save(**kwargs):
+            draft["page_id"] = "page-1"
+            return "New", "New text", ["new"]
+
+        fake_context = SimpleNamespace(bot=SimpleNamespace(send_chat_action=AsyncMock()))
+        with patch.object(bot, "state_store", FakeStateStore()), patch.object(bot, "edit_entry_draft", side_effect=edit_and_save):
+            applied = await bot._apply_draft_reply_edit(update, fake_context, draft, "shorter")
+
+        self.assertFalse(applied)
+        self.assertEqual(draft["text"], "Text")
+
+    def test_saved_date_picker_hides_cancel_draft(self):
+        keyboard = bot._date_picker_keyboard("entry-1", saved=True)
+        callbacks = [button.callback_data for row in keyboard.inline_keyboard for button in row]
+        self.assertNotIn("cancel:entry-1", callbacks)
+
+    def test_reply_to_saved_note_is_not_a_draft_edit(self):
+        fake_context = SimpleNamespace(user_data={bot.DRAFTS_KEY: {"entry-1": self._draft(page_id="page-1")}})
+        with patch.object(bot, "state_store", SimpleNamespace(data={"drafts": {}})):
+            self.assertIsNone(bot._find_draft_by_reply(fake_context, 123, 20))
 
 
 class StatCommandTests(unittest.IsolatedAsyncioTestCase):
@@ -1631,6 +1822,9 @@ class FakeQuery:
     async def edit_message_text(self, text, **kwargs):
         self.edits.append({"text": text, **kwargs})
 
+    async def edit_message_reply_markup(self, reply_markup=None):
+        self.edits.append({"reply_markup": reply_markup})
+
 
 class FakeApplication:
     def __init__(self, close_coroutines=False):
@@ -1789,6 +1983,9 @@ class FakeStateStore:
 
     def remove_draft(self, entry_id):
         self.removed_drafts.append(entry_id)
+
+    def prune_saved_drafts(self, limit):
+        return []
 
     def get_rules(self):
         return getattr(self, "rules", [])

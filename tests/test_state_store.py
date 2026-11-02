@@ -27,6 +27,22 @@ class StateStoreTests(unittest.TestCase):
             store.clear_voice_retry("123:10")
             self.assertIsNone(StateStore(path).get_voice_retry("123:10"))
 
+    def test_prune_saved_drafts_keeps_newest_saved_and_all_unsaved(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "state.json"
+            store = StateStore(path)
+            store.save_draft({"id": "draft", "text": "unsaved"})
+            for i in range(3):
+                store.save_draft({"id": f"saved-{i}", "page_id": f"page-{i}"})
+                store.data["drafts"][f"saved-{i}"]["updated_at"] = f"2026-01-0{i + 1}T00:00:00"
+
+            self.assertEqual(store.prune_saved_drafts(2), ["saved-0"])
+            reloaded = StateStore(path)
+            self.assertIsNone(reloaded.get_draft("saved-0"))
+            self.assertIsNotNone(reloaded.get_draft("saved-1"))
+            self.assertIsNotNone(reloaded.get_draft("draft"))
+            self.assertEqual(store.prune_saved_drafts(2), [])
+
     def test_records_messages_statuses_and_drafts(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             store = StateStore(Path(tmpdir) / "state.json")

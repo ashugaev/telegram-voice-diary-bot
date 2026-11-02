@@ -49,7 +49,7 @@ from services.i18n import (
     normalize_language,
     t,
 )
-from services.notion import save_entry
+from services.notion import archive_page, page_url, save_entry, update_entry_date
 from services.state_store import (
     CHRONOLOGY_SECTION,
     MODE_CHAT,
@@ -71,6 +71,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 DRAFTS_KEY = "drafts"
+SAVED_ENTRIES_LIMIT = 50
 EDIT_PROMPTS_KEY = "edit_prompts"
 MEMORY_PROMPTS_KEY = "memory_prompts"
 MEMORY_REQUESTS_KEY = "memory_requests"
@@ -589,7 +590,7 @@ def _get_draft(context: ContextTypes.DEFAULT_TYPE, entry_id: str) -> dict[str, A
 
 def _find_draft_by_reply(context: ContextTypes.DEFAULT_TYPE, chat_id: int, reply_to_message_id: int) -> dict[str, Any] | None:
     for entry_id, draft in list(_drafts(context).items()):
-        if draft.get("chat_id") == chat_id:
+        if draft.get("chat_id") == chat_id and not draft.get("page_id"):
             if (
                 _preview_msg_id(draft) == reply_to_message_id
                 or draft.get("metadata", {}).get("telegram_message_id") == reply_to_message_id
@@ -598,7 +599,7 @@ def _find_draft_by_reply(context: ContextTypes.DEFAULT_TYPE, chat_id: int, reply
                 return draft
     stored_drafts = getattr(state_store, "data", {}).get("drafts", {})
     for entry_id, draft in list(stored_drafts.items()):
-        if draft.get("chat_id") == chat_id:
+        if draft.get("chat_id") == chat_id and not draft.get("page_id"):
             if (
                 _preview_msg_id(draft) == reply_to_message_id
                 or draft.get("metadata", {}).get("telegram_message_id") == reply_to_message_id
@@ -616,6 +617,7 @@ def _preview_keyboard(
     preview_page: int = 0,
     page_count: int = 1,
     language: str | None = None,
+    page_id: str | None = None,
 ) -> InlineKeyboardMarkup:
     rows = []
     if show_pagination and page_count > 1:
@@ -633,12 +635,28 @@ def _preview_keyboard(
     ])
     if roast.is_configured():
         rows.append([InlineKeyboardButton(t("button.roast", language), callback_data=f"roast:{entry_id}")])
-    rows.append([InlineKeyboardButton(t("button.save", language), callback_data=f"save:{entry_id}")])
-    rows.append([InlineKeyboardButton(t("button.cancel", language), callback_data=f"cancel:{entry_id}")])
+    if page_id:
+        rows.append([InlineKeyboardButton(t("button.open_notion", language), url=page_url(page_id))])
+        rows.append([InlineKeyboardButton(t("button.delete", language), callback_data=f"delete:{entry_id}")])
+    else:
+        rows.append([InlineKeyboardButton(t("button.save", language), callback_data=f"save:{entry_id}")])
+        rows.append([InlineKeyboardButton(t("button.cancel", language), callback_data=f"cancel:{entry_id}")])
     return InlineKeyboardMarkup(rows)
 
 
-def _date_picker_keyboard(entry_id: str, selected_date: str | None = None, language: str | None = None) -> InlineKeyboardMarkup:
+def _delete_confirm_keyboard(entry_id: str, language: str | None = None) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(t("button.delete_confirm", language), callback_data=f"delete_confirm:{entry_id}")],
+        [InlineKeyboardButton(t("button.back_preview", language), callback_data=f"back_to_preview:{entry_id}")],
+    ])
+
+
+def _date_picker_keyboard(
+    entry_id: str,
+    selected_date: str | None = None,
+    language: str | None = None,
+    saved: bool = False,
+) -> InlineKeyboardMarkup:
     normalized = _normalize_entry_date(selected_date)
     rows = []
     for entry_date in _entry_date_options():
@@ -650,7 +668,8 @@ def _date_picker_keyboard(entry_id: str, selected_date: str | None = None, langu
             )
         ])
     rows.append([InlineKeyboardButton(t("button.back_preview", language), callback_data=f"back_to_preview:{entry_id}")])
-    rows.append([InlineKeyboardButton(t("button.cancel_draft", language), callback_data=f"cancel:{entry_id}")])
+    if not saved:
+        rows.append([InlineKeyboardButton(t("button.cancel_draft", language), callback_data=f"cancel:{entry_id}")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -741,6 +760,7 @@ def _preview_keyboard_for_draft(draft: dict, preview: PreviewRender | None = Non
         preview_page=preview.page,
         page_count=preview.page_count,
         language=draft.get("language"),
+        page_id=draft.get("page_id"),
     )
 
 
@@ -2276,6 +2296,12 @@ async def entry_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await query.message.reply_text(t("draft.saving", language))
         return
 
+    if draft.get("page_id") and action in {"save", "save_anyway", "cancel"}:
+        await query.message.reply_text(t("entry.already_saved", language))
+        return
+    if not draft.get("page_id") and action in {"delete", "delete_confirm"}:
+        return
+
     if action == "save":
         await _save_draft(query, context, entry_id, draft)
     elif action == "save_anyway":
@@ -2294,6 +2320,10 @@ async def entry_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await _edit_preview(context, draft)
     elif action == "set_date":
         await _set_entry_date(update, context, draft)
+    elif action == "delete":
+        await query.edit_message_reply_markup(reply_markup=_delete_confirm_keyboard(entry_id, language))
+    elif action == "delete_confirm":
+        await _delete_saved_entry(query, context, entry_id, draft)
 
 
 async def duplicate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2412,16 +2442,6 @@ async def _save_draft(query, context: ContextTypes.DEFAULT_TYPE, entry_id: str, 
             allow_duplicate=draft.get("allow_duplicate", False),
             original_text=draft.get("raw_text") or draft["text"],
         )
-        if result.created:
-            await query.edit_message_text(t("saved", language))
-        else:
-            draft["saving"] = False
-            state_store.save_draft(draft)
-            await query.edit_message_text(
-                _duplicate_warning_text(draft.get("metadata"), language),
-                reply_markup=_duplicate_save_keyboard(entry_id, language),
-            )
-            return
     except Exception as e:
         logger.exception("Error saving to Notion")
         draft["saving"] = False
@@ -2432,9 +2452,44 @@ async def _save_draft(query, context: ContextTypes.DEFAULT_TYPE, entry_id: str, 
         )
         return
 
-    _drafts(context).pop(entry_id, None)
+    draft["saving"] = False
+    if not result.created:
+        state_store.save_draft(draft)
+        await query.edit_message_text(
+            _duplicate_warning_text(draft.get("metadata"), language),
+            reply_markup=_duplicate_save_keyboard(entry_id, language),
+        )
+        return
+
+    # Saved entries stay addressable so post-save buttons keep working.
+    draft["page_id"] = result.page_id
     state_store.mark_message_saved(draft.get("message_key"))
+    state_store.save_draft(draft)
+    for pruned_id in state_store.prune_saved_drafts(SAVED_ENTRIES_LIMIT):
+        _drafts(context).pop(pruned_id, None)
+    preview = _render_preview_for_draft(draft)
+    await query.edit_message_text(
+        preview.text,
+        parse_mode="HTML",
+        reply_markup=_preview_keyboard_for_draft(draft, preview),
+    )
+
+
+async def _delete_saved_entry(query, context: ContextTypes.DEFAULT_TYPE, entry_id: str, draft: dict) -> None:
+    language = draft.get("language")
+    draft["saving"] = True
+    try:
+        await archive_page(draft["page_id"])
+    except Exception as e:
+        logger.exception("Error deleting Notion entry")
+        draft["saving"] = False
+        await query.message.reply_text(t("entry.update_failed", language, error=e))
+        await _edit_preview(context, draft)
+        return
+    _drafts(context).pop(entry_id, None)
+    state_store.mark_message_cancelled(draft.get("message_key"))
     state_store.remove_draft(entry_id)
+    await query.edit_message_text(t("entry.deleted", language))
 
 
 async def _cancel_draft(query, context: ContextTypes.DEFAULT_TYPE, entry_id: str, draft: dict) -> None:
@@ -2477,7 +2532,7 @@ async def _show_date_picker(query, draft: dict) -> None:
     await query.edit_message_text(
         text=t("date.choose", language, date=escape(_entry_date_label(draft["entry_date"], language))),
         parse_mode="HTML",
-        reply_markup=_date_picker_keyboard(draft["id"], draft["entry_date"], language),
+        reply_markup=_date_picker_keyboard(draft["id"], draft["entry_date"], language, saved=bool(draft.get("page_id"))),
     )
 
 
@@ -2489,9 +2544,31 @@ async def _set_entry_date(update: Update, context: ContextTypes.DEFAULT_TYPE, dr
         await _show_date_picker(update.callback_query, draft)
         return
 
+    if draft.get("page_id"):
+        draft["saving"] = True
+        try:
+            await update_entry_date(draft["page_id"], entry_date)
+        except Exception as e:
+            logger.exception("Error updating Notion entry date")
+            await update.callback_query.message.reply_text(t("entry.update_failed", language, error=e))
+            await _edit_preview(context, draft)
+            return
+        finally:
+            draft["saving"] = False
+
     draft["entry_date"] = entry_date
     state_store.save_draft(draft)
     await _edit_preview(context, draft)
+
+
+async def _reject_locked_draft_edit(user_msg, draft: dict, language: str | None) -> bool:
+    if draft.get("page_id"):
+        await user_msg.reply_text(t("entry.already_saved", language))
+        return True
+    if draft.get("saving"):
+        await user_msg.reply_text(t("draft.saving", language))
+        return True
+    return False
 
 
 async def _apply_draft_reply_edit(
@@ -2508,8 +2585,7 @@ async def _apply_draft_reply_edit(
     if not instruction_text:
         return False
 
-    if draft.get("saving"):
-        await user_msg.reply_text(t("draft.saving", language))
+    if await _reject_locked_draft_edit(user_msg, draft, language):
         return False
 
     rules = state_store.get_rules() if hasattr(state_store, "get_rules") else []
@@ -2531,6 +2607,10 @@ async def _apply_draft_reply_edit(
             await _edit_reply_message(context, status_message, t("error", language, error=e), reply_markup=failure_markup)
         else:
             await user_msg.reply_text(t("error", language, error=e))
+        return False
+
+    # Save may have started or finished while the model was editing.
+    if await _reject_locked_draft_edit(user_msg, draft, language):
         return False
 
     draft["title"] = new_title
@@ -2997,7 +3077,7 @@ def main() -> None:
     app.add_handler(
         CallbackQueryHandler(
             entry_callback,
-            pattern="^(save|save_anyway|roast|cancel|preview_page|pick_date|set_date|back_to_preview):",
+            pattern="^(save|save_anyway|roast|cancel|preview_page|pick_date|set_date|back_to_preview|delete|delete_confirm):",
         )
     )
 
