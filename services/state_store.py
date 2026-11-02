@@ -370,6 +370,18 @@ class StateStore:
         modes[str(chat_id)] = enabled
         self._save()
 
+    def prune_saved_drafts(self, limit: int) -> list[str]:
+        saved = sorted(
+            (draft for draft in self.data["drafts"].values() if draft.get("page_id")),
+            key=lambda draft: draft.get("updated_at") or "",
+        )
+        pruned = [draft["id"] for draft in saved[:max(len(saved) - limit, 0)]]
+        for entry_id in pruned:
+            self.data["drafts"].pop(entry_id, None)
+        if pruned:
+            self._save()
+        return pruned
+
     def remove_draft(self, entry_id: str) -> None:
         self.data["drafts"].pop(entry_id, None)
         self._save()

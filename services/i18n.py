@@ -48,6 +48,14 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en": "✓ Confirm",
         "ru": "✓ Подтвердить",
     },
+    "button.delete": {
+        "en": "🗑 Delete from Notion",
+        "ru": "🗑 Удалить из Notion",
+    },
+    "button.delete_confirm": {
+        "en": "🗑 Yes, delete",
+        "ru": "🗑 Да, удалить",
+    },
     "button.date": {
         "en": "Date: {date}",
         "ru": "Дата: {date}",
@@ -71,6 +79,10 @@ MESSAGES: dict[str, dict[str, str]] = {
     "button.original": {
         "en": "↺ Original",
         "ru": "↺ Оригинал",
+    },
+    "button.open_notion": {
+        "en": "✓ Saved · Open in Notion",
+        "ru": "✓ Сохранено · открыть в Notion",
     },
     "button.retry": {
         "en": "Retry",
@@ -172,6 +184,18 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en": "Yesterday ({date})",
         "ru": "Вчера ({date})",
     },
+    "entry.already_saved": {
+        "en": "This note is already saved to Notion.",
+        "ru": "Эта заметка уже сохранена в Notion.",
+    },
+    "entry.deleted": {
+        "en": "🗑 Deleted from Notion.",
+        "ru": "🗑 Удалено из Notion.",
+    },
+    "entry.update_failed": {
+        "en": "Notion not updated: {error}",
+        "ru": "Notion не обновлен: {error}",
+    },
     "draft.gone": {
         "en": "This draft is no longer available.",
         "ru": "Этот черновик уже недоступен.",
@@ -217,8 +241,8 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ru": "Без названия",
     },
     "help": {
-        "en": "*Sending*\nVoice or text. I'll transcribe, title, tag, and show a preview.\n\n*Editing*\nReply to preview with instructions to edit title, text, or tags.\n\n*Preview buttons*\n`Date` — today or last 6 days\n`🔥 Roast` — honest teardown, reply to continue\n`✓ Save` — write to Notion, nothing is saved until pressed\n`Cancel` — discard draft\n\n*Commands*\n{commands}\n\n*Automatic*\nDaily digest at 21:00. Weekly report on Sunday at 21:00.",
-        "ru": "*Отправка*\nГолос или текст. Я распознаю, озаглавлю, проставлю теги и покажу превью.\n\n*Редактирование*\nОтветь на превью текстом или голосом с инструкцией, чтобы изменить заголовок, текст или теги.\n\n*Кнопки превью*\n`Дата` — сегодня или последние 6 дней\n`🔥 Разъёб` — честный разбор, ответь чтобы продолжить\n`✓ Сохранить` — записать в Notion, до этого ничего не сохраняется\n`Отмена` — удалить черновик\n\n*Команды*\n{commands}\n\n*Автоматически*\nДайджест дня в 21:00. Недельный отчет в воскресенье в 21:00.",
+        "en": "*Sending*\nVoice or text. I'll transcribe, title, tag, and show a preview.\n\n*Editing*\nReply to preview with instructions to edit title, text, or tags.\n\n*Preview buttons*\n`Date` — today or last 6 days\n`🔥 Roast` — honest teardown, reply to continue\n`✓ Save` — write to Notion, nothing is saved until pressed\n`Cancel` — discard draft\n\n*After save*\n`Date` — move note to another day in Notion\n`🔥 Roast` — still available\n`Open in Notion` — jump to the row\n`🗑 Delete` — move row to Notion trash\n\n*Commands*\n{commands}\n\n*Automatic*\nDaily digest at 21:00. Weekly report on Sunday at 21:00.",
+        "ru": "*Отправка*\nГолос или текст. Я распознаю, озаглавлю, проставлю теги и покажу превью.\n\n*Редактирование*\nОтветь на превью текстом или голосом с инструкцией, чтобы изменить заголовок, текст или теги.\n\n*Кнопки превью*\n`Дата` — сегодня или последние 6 дней\n`🔥 Разъёб` — честный разбор, ответь чтобы продолжить\n`✓ Сохранить` — записать в Notion, до этого ничего не сохраняется\n`Отмена` — удалить черновик\n\n*После сохранения*\n`Дата` — перенести заметку на другой день в Notion\n`🔥 Разъёб` — остается доступен\n`Открыть в Notion` — перейти к записи\n`🗑 Удалить` — убрать запись в корзину Notion\n\n*Команды*\n{commands}\n\n*Автоматически*\nДайджест дня в 21:00. Недельный отчет в воскресенье в 21:00.",
     },
     "language.changed": {
         "en": "Language switched to {language_name}.",
@@ -467,10 +491,6 @@ MESSAGES: dict[str, dict[str, str]] = {
     "rules.header": {
         "en": "🧠 Rules",
         "ru": "🧠 Правила",
-    },
-    "saved": {
-        "en": "✓ Saved to Notion and verified",
-        "ru": "✓ Сохранено в Notion и проверено",
     },
     "saving": {
         "en": "Saving to Notion...",

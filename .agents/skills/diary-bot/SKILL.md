@@ -35,6 +35,7 @@ Use this as project memory for implementation and validation.
 - Date picker allows today plus previous 6 days.
 - Duplicate voice notes use Telegram voice facts; duplicate text notes use exact source-text hash.
 - Notion save retries transient errors and verifies created page before marking saved.
+- Saved note keeps its preview and draft with `page_id` (newest `SAVED_ENTRIES_LIMIT` kept). Post-save buttons: Roast, Date (patches Notion row), Open in Notion, Delete (archives row, confirm first). Save/Cancel and reply edits never touch a saved note.
 - Long transcriptions use metadata-only formatting and keep original text (no Original toggle).
 - `/memory` rebuild is two-step (focus prompt, then confirm), sequential, single-flight, and persists points after every note. It replays saved notes into the profile only; chronology grows from new entries.
 - The three memory stores (author profile, behavior rules, chronology) are accumulated `MemoryItem` lists edited only through `memory.apply_ops`: the model returns `create`/`modify`/`delete` operations addressing an item id, never a rewritten list. An unknown id is a logged no-op. Ids persist in state; list size and item length are guided in the prompt, never trimmed in code.
