@@ -92,9 +92,9 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en": "🔥 Roast",
         "ru": "🔥 Разъёб",
     },
-    "button.save": {
-        "en": "✓ Save",
-        "ru": "✓ Сохранить",
+    "button.retry_save": {
+        "en": "Retry save",
+        "ru": "Повторить сохранение",
     },
     "button.tags": {
         "en": "✎ Tags",
@@ -241,8 +241,8 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ru": "Без названия",
     },
     "help": {
-        "en": "*Sending*\nVoice or text. I'll transcribe, title, tag, and show a preview.\n\n*Editing*\nReply to preview with instructions to edit title, text, or tags.\n\n*Preview buttons*\n`Date` — today or last 6 days\n`🔥 Roast` — honest teardown, reply to continue\n`✓ Save` — write to Notion, nothing is saved until pressed\n`Cancel` — discard draft\n\n*After save*\n`Date` — move note to another day in Notion\n`🔥 Roast` — still available\n`Open in Notion` — jump to the row\n`🗑 Delete` — move row to Notion trash\n\n*Commands*\n{commands}\n\n*Automatic*\nDaily digest at 21:00. Weekly report on Sunday at 21:00.",
-        "ru": "*Отправка*\nГолос или текст. Я распознаю, озаглавлю, проставлю теги и покажу превью.\n\n*Редактирование*\nОтветь на превью текстом или голосом с инструкцией, чтобы изменить заголовок, текст или теги.\n\n*Кнопки превью*\n`Дата` — сегодня или последние 6 дней\n`🔥 Разъёб` — честный разбор, ответь чтобы продолжить\n`✓ Сохранить` — записать в Notion, до этого ничего не сохраняется\n`Отмена` — удалить черновик\n\n*После сохранения*\n`Дата` — перенести заметку на другой день в Notion\n`🔥 Разъёб` — остается доступен\n`Открыть в Notion` — перейти к записи\n`🗑 Удалить` — убрать запись в корзину Notion\n\n*Команды*\n{commands}\n\n*Автоматически*\nДайджест дня в 21:00. Недельный отчет в воскресенье в 21:00.",
+        "en": "*Sending*\nVoice or text. I'll transcribe, title, tag, and save to Notion automatically.\n\n*Editing*\nReply to the note with instructions to edit title, text, or tags. Notion row updates too.\n\n*Note buttons*\n`Date` — move note to today or last 6 days\n`🔥 Roast` — honest teardown, reply to continue\n`Open in Notion` — jump to the row\n`🗑 Delete` — move row to Notion trash\n\n*If save fails*\n`Retry save` — try again\n`Cancel` — discard draft\n\n*Commands*\n{commands}\n\n*Automatic*\nDaily digest at 21:00. Weekly report on Sunday at 21:00.",
+        "ru": "*Отправка*\nГолос или текст. Я распознаю, озаглавлю, проставлю теги и сам сохраню в Notion.\n\n*Редактирование*\nОтветь на заметку текстом или голосом с инструкцией, чтобы изменить заголовок, текст или теги. Запись в Notion обновится.\n\n*Кнопки заметки*\n`Дата` — перенести на сегодня или последние 6 дней\n`🔥 Разъёб` — честный разбор, ответь чтобы продолжить\n`Открыть в Notion` — перейти к записи\n`🗑 Удалить` — убрать запись в корзину Notion\n\n*Если сохранение не удалось*\n`Повторить сохранение` — попробовать снова\n`Отмена` — удалить черновик\n\n*Команды*\n{commands}\n\n*Автоматически*\nДайджест дня в 21:00. Недельный отчет в воскресенье в 21:00.",
     },
     "language.changed": {
         "en": "Language switched to {language_name}.",
@@ -265,8 +265,8 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ru": "Слушаю...",
     },
     "mode.diary_enabled": {
-        "en": "📖 Diary mode enabled. Voice and text messages are formatted and prepared for Notion.",
-        "ru": "📖 Режим дневника включен. Голосовые и текстовые сообщения форматируются и готовятся к сохранению в Notion.",
+        "en": "📖 Diary mode enabled. Voice and text messages are formatted and saved to Notion.",
+        "ru": "📖 Режим дневника включен. Голосовые и текстовые сообщения форматируются и сохраняются в Notion.",
     },
     "mode.chat_enabled": {
         "en": "🔥 Chat mode enabled. Messages continue the conversation with your roast buddy and are not saved to Notion. Memory updates normally.",
@@ -425,8 +425,8 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ru": "Это сообщение уже недоступно.",
     },
     "not_saved": {
-        "en": "Not saved to Notion: {error}\nDraft kept. Press Save to retry or Cancel to discard.",
-        "ru": "Не сохранено в Notion: {error}\nЧерновик сохранен. Нажми Сохранить для повтора или Отмена для удаления.",
+        "en": "Not saved to Notion: {error}\nDraft kept. Press Retry save or Cancel to discard.",
+        "ru": "Не сохранено в Notion: {error}\nЧерновик сохранен. Нажми Повторить сохранение или Отмена для удаления.",
     },
     "original_already": {
         "en": "This draft already shows the original text.",
@@ -445,12 +445,12 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ru": "Дата: <code>{date}</code>",
     },
     "preview.fallback": {
-        "en": "<code>Preview is too long for Telegram. Full text is kept for Save/Edit/Format.</code>",
-        "ru": "<code>Превью слишком длинное для Telegram. Полный текст сохранен для Сохранить/Правка/Формат.</code>",
+        "en": "<code>Preview is too long for Telegram. Full text is kept in Notion and for edits.</code>",
+        "ru": "<code>Превью слишком длинное для Telegram. Полный текст сохранен в Notion и для правок.</code>",
     },
     "preview.truncated": {
-        "en": "\n\n<code>Preview truncated. Page {page}/{page_count}. Full text is kept for Save/Edit/Format.</code>",
-        "ru": "\n\n<code>Превью обрезано. Страница {page}/{page_count}. Полный текст сохранен для Сохранить/Правка/Формат.</code>",
+        "en": "\n\n<code>Preview truncated. Page {page}/{page_count}. Full text is kept in Notion and for edits.</code>",
+        "ru": "\n\n<code>Превью обрезано. Страница {page}/{page_count}. Полный текст сохранен в Notion и для правок.</code>",
     },
     "processing": {
         "en": "This message is already processing.",
@@ -637,8 +637,8 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ru": "*Итоги недели*",
     },
     "welcome": {
-        "en": "👋 Diary bot is online.\n\nSend voice or text. I'll transcribe, add title and tags, and show a preview. You edit, press Save, and the note goes to Notion.\n\nDaily digest at 21:00. More: /help.",
-        "ru": "👋 Пиздабол на связи.\n\nПрисылай голос или текст. Я распознаю, добавлю заголовок и теги, покажу превью. Ты правишь, жмешь Сохранить, запись улетает в Notion.\n\nДайджест дня в 21:00. Остальное: /help.",
+        "en": "👋 Diary bot is online.\n\nSend voice or text. I'll transcribe, add title and tags, and save the note to Notion. Reply to it to edit.\n\nDaily digest at 21:00. More: /help.",
+        "ru": "👋 Пиздабол на связи.\n\nПрисылай голос или текст. Я распознаю, добавлю заголовок и теги, сохраню запись в Notion. Ответь на нее, чтобы поправить.\n\nДайджест дня в 21:00. Остальное: /help.",
     },
 }
 

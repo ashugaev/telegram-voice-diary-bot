@@ -29,8 +29,8 @@ class I18nTests(unittest.TestCase):
                 self.assertEqual(_fields(translations["en"]), _fields(translations["ru"]))
 
     def test_runtime_translations(self):
-        self.assertEqual(t("button.save", "ru"), "✓ Сохранить")
-        self.assertEqual(t("button.save", "en"), "✓ Save")
+        self.assertEqual(t("button.retry_save", "ru"), "Повторить сохранение")
+        self.assertEqual(t("button.retry_save", "en"), "Retry save")
         self.assertEqual(t("language.changed", "ru", language_name="Русский"), "Язык переключен на Русский.")
         self.assertEqual(t("language.changed", "en", language_name="English"), "Language switched to English.")
 

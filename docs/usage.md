@@ -8,11 +8,11 @@ Commands live in Telegram's `/` menu (published on startup); `/help` prints the 
 2. Voice is transcribed with OpenAI Whisper.
 3. The formatter generates a title, tags, and lightly cleaned text.
 4. The bot shows the formatted preview. The original recognized text is stored in Notion as `Original Text`.
-5. Press **Save** — the entry becomes its own row in your Notion database.
+5. The bot saves it right away — the entry becomes its own row in your Notion database.
 
-## Editing before saving
+## Editing
 
-The processing reply turns into a single preview message you edit in place:
+The processing reply turns into a single note message you edit in place:
 
 ```
 Generated title
@@ -25,21 +25,21 @@ Daily sport health
 
 [        Date: Today (YYYY-MM-DD)        ]
 [            🔥 Roast             ]
-[            ✓ Save              ]
-[            Cancel              ]
+[  ✓ Saved · Open in Notion      ]
+[            🗑 Delete            ]
 ```
 
-- **Editing via reply** — reply to the preview message with text or voice instructions to adjust title, text, or tags (e.g. _"change title to X and add tag work"_).
-- **Date** — opens a 7-day picker. **Back to preview** keeps the date; **Cancel draft** discards.
-- **Cancel** — discards the draft without saving.
+- **Editing via reply** — reply to the note with text or voice instructions to adjust title, text, or tags (e.g. _"change title to X and add tag work"_). The Notion row's title, tags, and body are rewritten; manual Notion body and tag edits are overwritten. `Original Text` stays raw.
+- **Date** — opens a 7-day picker and moves the Notion row. **Back to preview** keeps the date.
+- **Delete** — asks for confirmation, then moves the row to Notion trash.
 
-Nothing is written to Notion until you press **Save**. If saving fails, the preview stays with the Save button so you can retry. If the bot recognizes an already-saved voice message, it warns you first and offers **Add anyway**.
+If saving fails, the message shows **Retry save** and **Cancel**. If the bot recognizes an already-saved entry, it warns you and offers **Add anyway**.
 
 ## Modes: Diary vs Chat (пиздеж)
 
 The bot has two persistent modes, switchable via the single toggle button at the bottom of the screen (`🔥 Включить пиздеж` when in diary mode, `📖 Включить дневник` when in chat mode) or commands (`/diary` / `/chat`):
 
-1. **📖 Diary (default)** — Voice or text messages are formatted, tagged, previewed, and saved to Notion upon clicking **Save**.
+1. **📖 Diary (default)** — Voice or text messages are formatted, tagged, and saved to Notion automatically.
 2. **🔥 Chat (пиздеж)** — Direct ongoing conversation with the roast persona. Messages are kept raw (unformatted), receive immediate roast responses, and do NOT create Notion drafts or entries. Memory updates (author profile and behavior rules) continue working as usual. The conversation accumulates across messages; at 30 messages it automatically summarizes the earlier dialogue into a compact recap and keeps the latest 10 messages. Switching to Diary mode resets the chat conversation history.
 
 ## 🔥 Roast mode (разъёб)

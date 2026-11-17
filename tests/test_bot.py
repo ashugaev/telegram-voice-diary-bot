@@ -97,6 +97,8 @@ class PreviewRenderingTests(unittest.TestCase):
                 "cancel:entry-1",
             ],
         )
+        labels = [button.text for row in keyboard.inline_keyboard for button in row]
+        self.assertIn("Retry save", labels)
 
     def test_preview_keyboard_adds_top_pagination_row_only_when_truncated(self):
         keyboard = bot._preview_keyboard(
@@ -323,6 +325,7 @@ class CreatePreviewTests(unittest.IsolatedAsyncioTestCase):
             patch.object(bot, "_new_entry_id", return_value="entry-1"),
             patch.object(bot, "state_store", fake_state_store),
             patch.object(bot, "_update_memory_and_chronology", new=AsyncMock()),
+            patch.object(bot, "save_entry", new=AsyncMock(return_value=SAVED)),
         ):
             await bot._create_preview(
                 source_message,
@@ -334,8 +337,8 @@ class CreatePreviewTests(unittest.IsolatedAsyncioTestCase):
 
         entry_date = bot._default_entry_date()
         fake_formatter.assert_awaited_once_with("raw transcription", language="en", rules=[])
-        self.assertEqual(len(fake_context.bot.edits), 1)
-        edit = fake_context.bot.edits[0]
+        self.assertEqual(fake_context.bot.edits[0]["text"], "Saving to Notion...")
+        edit = fake_context.bot.edits[-1]
         self.assertEqual(edit["chat_id"], 123)
         self.assertEqual(edit["message_id"], 20)
         self.assertEqual(edit["text"], bot._preview_text("Title", "Body", ["work"], entry_date, language="en"))
@@ -371,6 +374,7 @@ class CreatePreviewTests(unittest.IsolatedAsyncioTestCase):
             patch.object(bot, "_new_entry_id", return_value="entry-2"),
             patch.object(bot, "state_store", fake_state_store),
             patch.object(bot, "_update_memory_and_chronology", new=AsyncMock()),
+            patch.object(bot, "save_entry", new=AsyncMock(return_value=SAVED)),
         ):
             await bot._create_preview(source_message, fake_context, "plain text")
 
@@ -399,6 +403,7 @@ class CreatePreviewTests(unittest.IsolatedAsyncioTestCase):
             patch.object(bot, "_new_entry_id", return_value="entry-long"),
             patch.object(bot, "state_store", fake_state_store),
             patch.object(bot, "_update_memory_and_chronology", new=AsyncMock()),
+            patch.object(bot, "save_entry", new=AsyncMock(return_value=SAVED)),
         ):
             await bot._create_preview(
                 source_message,
@@ -408,8 +413,8 @@ class CreatePreviewTests(unittest.IsolatedAsyncioTestCase):
                 preview_message=processing_message,
             )
 
-        edit_text = fake_context.bot.edits[0]["text"]
-        keyboard = fake_context.bot.edits[0]["reply_markup"]
+        edit_text = fake_context.bot.edits[-1]["text"]
+        keyboard = fake_context.bot.edits[-1]["reply_markup"]
         callback_data = [
             button.callback_data
             for row in keyboard.inline_keyboard
@@ -439,6 +444,7 @@ class CreatePreviewTests(unittest.IsolatedAsyncioTestCase):
             patch.object(bot, "_new_entry_id", return_value="entry-fmt"),
             patch.object(bot, "state_store", fake_state_store),
             patch.object(bot, "_update_memory_and_chronology", new=AsyncMock()),
+            patch.object(bot, "save_entry", new=AsyncMock(return_value=SAVED)),
         ):
             await bot._create_preview(
                 source_message,
@@ -476,6 +482,7 @@ class CreatePreviewTests(unittest.IsolatedAsyncioTestCase):
             patch.object(bot, "_new_entry_id", return_value="entry-raw"),
             patch.object(bot, "state_store", fake_state_store),
             patch.object(bot, "_update_memory_and_chronology", new=AsyncMock()),
+            patch.object(bot, "save_entry", new=AsyncMock(return_value=SAVED)),
         ):
             await bot._create_preview(
                 source_message,
@@ -509,6 +516,7 @@ class CreatePreviewTests(unittest.IsolatedAsyncioTestCase):
             patch.object(bot, "_new_entry_id", return_value="entry-refresh"),
             patch.object(bot, "state_store", fake_state_store),
             patch.object(bot, "_update_memory_and_chronology", new=AsyncMock()) as fake_update,
+            patch.object(bot, "save_entry", new=AsyncMock(return_value=SAVED)),
         ):
             await bot._create_preview(
                 source_message,
@@ -521,6 +529,106 @@ class CreatePreviewTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(fake_context.application.created_tasks), 1)
         # The preview message carries the note about whatever the entry taught.
         fake_update.assert_called_once_with("plain text", processing_message, language="en")
+
+
+class AutosaveTests(unittest.IsolatedAsyncioTestCase):
+    async def _process_text(self, save_entry, fake_bot=None):
+        fake_state_store = FakeStateStore()
+        fake_state_store.messages["123:10"] = {
+            "key": "123:10",
+            "kind": "text",
+            "chat_id": 123,
+            "message_id": 10,
+            "text": "plain text",
+        }
+        fake_context = SimpleNamespace(
+            bot=fake_bot or FakeEditBot(),
+            user_data={},
+            application=FakeApplication(close_coroutines=True),
+        )
+        source_message = SimpleNamespace(chat_id=123, message_id=10)
+        processing_message = SimpleNamespace(chat_id=123, message_id=20)
+        with (
+            patch.object(bot, "format_entry", new=AsyncMock(return_value=("Title", "Body", ["work"]))),
+            patch.object(bot, "_new_entry_id", return_value="entry-1"),
+            patch.object(bot, "state_store", fake_state_store),
+            patch.object(bot, "_update_memory_and_chronology", new=AsyncMock()),
+            patch.object(bot, "save_entry", new=save_entry),
+            patch.object(bot.logger, "exception"),
+        ):
+            await bot._process_text_record(
+                fake_state_store.messages["123:10"],
+                source_message,
+                fake_context,
+                status_message=processing_message,
+            )
+        return fake_state_store, fake_context
+
+    def _final(self, fake_context):
+        final = fake_context.bot.edits[-1]
+        buttons = [b for row in final["reply_markup"].inline_keyboard for b in row]
+        return final, buttons
+
+    async def test_autosave_writes_notion_and_shows_saved_buttons(self):
+        save_entry = AsyncMock(return_value=SAVED)
+        fake_state_store, fake_context = await self._process_text(save_entry)
+
+        save_entry.assert_awaited_once()
+        draft = fake_context.user_data[bot.DRAFTS_KEY]["entry-1"]
+        self.assertEqual(draft["page_id"], "page-1")
+        self.assertEqual(fake_state_store.marked_saved, ["123:10"])
+        self.assertEqual(fake_state_store.marked_failed, [])
+        self.assertEqual(fake_context.bot.edits[0]["text"], "Preparing preview...")
+        first = fake_context.bot.edits[1]
+        self.assertEqual(first["text"], "Saving to Notion...")
+        self.assertIn("save:entry-1", [b.callback_data for row in first["reply_markup"].inline_keyboard for b in row])
+        final, buttons = self._final(fake_context)
+        self.assertIn("Title", final["text"])
+        self.assertIn("https://www.notion.so/page1", [b.url for b in buttons])
+        self.assertNotIn("save:entry-1", [b.callback_data for b in buttons])
+
+    async def test_autosave_failure_keeps_draft_with_retry_save(self):
+        fake_state_store, fake_context = await self._process_text(AsyncMock(side_effect=RuntimeError("down")))
+
+        self.assertEqual(fake_state_store.marked_failed, [])
+        self.assertEqual(fake_state_store.marked_drafted, [("123:10", "entry-1")])
+        self.assertNotIn("page_id", fake_context.user_data[bot.DRAFTS_KEY]["entry-1"])
+        final, buttons = self._final(fake_context)
+        self.assertIn("Not saved to Notion: down", final["text"])
+        retry = next(b for b in buttons if b.callback_data == "save:entry-1")
+        self.assertEqual(retry.text, "Retry save")
+        self.assertIn("cancel:entry-1", [b.callback_data for b in buttons])
+
+    async def test_autosave_telegram_error_never_marks_message_failed(self):
+        class FailingPreviewBot(FakeEditBot):
+            async def edit_message_text(self, **kwargs):
+                await super().edit_message_text(**kwargs)
+                if kwargs.get("parse_mode") == "HTML":
+                    raise RuntimeError("telegram down")
+
+        fake_bot = FailingPreviewBot()
+        fake_state_store, fake_context = await self._process_text(AsyncMock(return_value=SAVED), fake_bot)
+
+        self.assertEqual(fake_state_store.marked_saved, ["123:10"])
+        self.assertEqual(fake_state_store.marked_failed, [])
+        self.assertNotIn("status", fake_state_store.messages["123:10"])
+        callbacks = [
+            b.callback_data
+            for edit in fake_bot.edits if edit.get("reply_markup")
+            for row in edit["reply_markup"].inline_keyboard for b in row
+        ]
+        self.assertFalse(any((c or "").startswith("retry_process:") for c in callbacks))
+
+    async def test_autosave_duplicate_offers_add_anyway(self):
+        fake_state_store, fake_context = await self._process_text(
+            AsyncMock(return_value=SimpleNamespace(created=False, page_id="old-page"))
+        )
+
+        self.assertEqual(fake_state_store.marked_saved, [])
+        self.assertNotIn("page_id", fake_context.user_data[bot.DRAFTS_KEY]["entry-1"])
+        final, buttons = self._final(fake_context)
+        self.assertIn("already been added", final["text"])
+        self.assertEqual(buttons[0].callback_data, "save_anyway:entry-1")
 
 
 class DuplicateVoiceFlowTests(unittest.IsolatedAsyncioTestCase):
@@ -820,45 +928,6 @@ class FormatDraftFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("format:entry-1", callback_data)
         self.assertNotIn("unformat:entry-1", callback_data)
 
-    async def test_text_edit_preserves_original_recognized_text(self):
-        draft = {
-            "id": "entry-1",
-            "title": "Title",
-            "text": "Formatted text",
-            "raw_text": "Raw model text",
-            "tags": ["work"],
-            "chat_id": 123,
-            "preview_msg_id": 20,
-            "entry_date": bot._default_entry_date(),
-        }
-        user_msg = SimpleNamespace(
-            text="Manually edited text",
-            reply_to_message=SimpleNamespace(message_id=51),
-            message_id=60,
-        )
-        update = SimpleNamespace(
-            effective_message=user_msg,
-            effective_chat=SimpleNamespace(id=123),
-        )
-        context = SimpleNamespace(
-            bot=SimpleNamespace(
-                edit_message_text=AsyncMock(),
-                delete_message=AsyncMock(),
-            ),
-            user_data={
-                bot.DRAFTS_KEY: {"entry-1": draft},
-                bot.EDIT_PROMPTS_KEY: {"123:51": {"entry_id": "entry-1", "field": "text"}},
-            },
-        )
-        fake_state_store = FakeStateStore()
-
-        with patch.object(bot, "state_store", fake_state_store):
-            await bot.receive_edit_reply(update, context)
-
-        self.assertEqual(draft["text"], "Manually edited text")
-        self.assertEqual(draft["raw_text"], "Raw model text")
-        self.assertEqual(fake_state_store.saved_drafts[-1]["raw_text"], "Raw model text")
-
     async def test_reply_to_draft_preview_updates_draft_via_ai(self):
         draft = {
             "id": "entry-1",
@@ -969,6 +1038,7 @@ class FormatDraftFlowTests(unittest.IsolatedAsyncioTestCase):
             patch.object(bot, "_new_entry_id", return_value="entry-3"),
             patch.object(bot, "state_store", fake_state_store),
             patch.object(bot, "_update_memory_and_chronology", new=AsyncMock()),
+            patch.object(bot, "save_entry", new=AsyncMock(return_value=SAVED)),
         ):
             await bot._create_preview(source_message, fake_context, "voice note")
 
@@ -1053,10 +1123,11 @@ class CancelDraftTests(unittest.IsolatedAsyncioTestCase):
 class SaveDraftTests(unittest.IsolatedAsyncioTestCase):
     async def test_save_draft_keeps_draft_and_retry_button_when_notion_save_fails(self):
         fake_state_store = FakeStateStore()
-        fake_query = FakeQuery()
-        fake_context = SimpleNamespace(user_data={bot.DRAFTS_KEY: {}})
+        fake_context = SimpleNamespace(bot=FakeEditBot(), user_data={bot.DRAFTS_KEY: {}})
         draft = {
             "id": "entry-1",
+            "chat_id": 123,
+            "preview_msg_id": 20,
             "title": "Title",
             "text": "Text",
             "tags": ["work"],
@@ -1083,24 +1154,28 @@ class SaveDraftTests(unittest.IsolatedAsyncioTestCase):
             patch.object(bot, "state_store", fake_state_store),
             patch.object(bot.logger, "exception"),
         ):
-            await bot._save_draft(fake_query, fake_context, "entry-1", draft)
+            await bot._save_draft(fake_context, draft)
 
         self.assertFalse(draft["saving"])
         self.assertEqual(calls[0][4], draft["entry_date"])
         self.assertFalse(calls[0][5])
         self.assertEqual(calls[0][6], "Text")
         self.assertEqual(fake_state_store.saved_drafts[-1]["id"], "entry-1")
-        self.assertEqual(fake_query.edits[0]["text"], "Saving to Notion...")
-        self.assertIn("Not saved to Notion: notion timeout", fake_query.edits[1]["text"])
-        self.assertIn("Press Save to retry", fake_query.edits[1]["text"])
-        self.assertIsNotNone(fake_query.edits[1].get("reply_markup"))
+        self.assertEqual(fake_context.bot.edits[0]["text"], "Saving to Notion...")
+        self.assertIn("Not saved to Notion: notion timeout", fake_context.bot.edits[1]["text"])
+        self.assertIn("Press Retry save", fake_context.bot.edits[1]["text"])
+        self.assertEqual(fake_context.bot.edits[1]["message_id"], 20)
+        callbacks = [b.callback_data for row in fake_context.bot.edits[1]["reply_markup"].inline_keyboard for b in row]
+        self.assertIn("save:entry-1", callbacks)
+        self.assertIn("cancel:entry-1", callbacks)
 
     async def test_save_draft_keeps_draft_and_offers_add_anyway_when_duplicate_found(self):
         fake_state_store = FakeStateStore()
-        fake_query = FakeQuery()
-        fake_context = SimpleNamespace(user_data={bot.DRAFTS_KEY: {}})
+        fake_context = SimpleNamespace(bot=FakeEditBot(), user_data={bot.DRAFTS_KEY: {}})
         draft = {
             "id": "entry-1",
+            "chat_id": 123,
+            "preview_msg_id": 20,
             "title": "Title",
             "text": "Text",
             "tags": ["work"],
@@ -1125,20 +1200,21 @@ class SaveDraftTests(unittest.IsolatedAsyncioTestCase):
             patch.object(bot, "save_entry", new=duplicate_save_entry),
             patch.object(bot, "state_store", fake_state_store),
         ):
-            await bot._save_draft(fake_query, fake_context, "entry-1", draft)
+            await bot._save_draft(fake_context, draft)
 
         self.assertFalse(draft["saving"])
         self.assertEqual(fake_state_store.saved_drafts[-1]["id"], "entry-1")
-        self.assertIn("voice message has already been added", fake_query.edits[1]["text"])
-        keyboard = fake_query.edits[1]["reply_markup"]
+        self.assertIn("voice message has already been added", fake_context.bot.edits[1]["text"])
+        keyboard = fake_context.bot.edits[1]["reply_markup"]
         self.assertEqual(keyboard.inline_keyboard[0][0].callback_data, "save_anyway:entry-1")
 
     async def test_save_draft_passes_allow_duplicate_when_confirmed(self):
         fake_state_store = FakeStateStore()
-        fake_query = FakeQuery()
-        fake_context = SimpleNamespace(user_data={bot.DRAFTS_KEY: {"entry-1": {}}})
+        fake_context = SimpleNamespace(bot=FakeEditBot(), user_data={bot.DRAFTS_KEY: {"entry-1": {}}})
         draft = {
             "id": "entry-1",
+            "chat_id": 123,
+            "preview_msg_id": 20,
             "title": "Title",
             "text": "Text",
             "tags": ["work"],
@@ -1165,7 +1241,7 @@ class SaveDraftTests(unittest.IsolatedAsyncioTestCase):
             patch.object(bot, "save_entry", new=successful_save_entry),
             patch.object(bot, "state_store", fake_state_store),
         ):
-            await bot._save_draft(fake_query, fake_context, "entry-1", draft)
+            await bot._save_draft(fake_context, draft)
 
         self.assertTrue(calls[0][5])
         self.assertEqual(fake_state_store.marked_saved, ["123:10"])
@@ -1178,10 +1254,11 @@ class SaveDraftTests(unittest.IsolatedAsyncioTestCase):
             "chat_id": 123,
             "message_id": 10,
         }
-        fake_query = FakeQuery()
-        fake_context = SimpleNamespace(bot=FakeSendBot(), user_data={bot.DRAFTS_KEY: {"entry-1": {}}})
+        fake_context = SimpleNamespace(bot=FakeEditBot(), user_data={bot.DRAFTS_KEY: {"entry-1": {}}})
         draft = {
             "id": "entry-1",
+            "chat_id": 123,
+            "preview_msg_id": 20,
             "title": "Title",
             "text": "Text",
             "tags": ["work"],
@@ -1207,7 +1284,7 @@ class SaveDraftTests(unittest.IsolatedAsyncioTestCase):
             patch.object(bot, "save_entry", new=successful_save_entry),
             patch.object(bot, "state_store", fake_state_store),
         ):
-            await bot._save_draft(fake_query, fake_context, "entry-1", draft)
+            await bot._save_draft(fake_context, draft)
 
         self.assertEqual(calls[0][3]["source_message_url"], "https://t.me/diary_bot?start=src_123_10")
         self.assertEqual(calls[0][3]["source_text_hash"], bot._source_text_hash("Text"))
@@ -1215,10 +1292,11 @@ class SaveDraftTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_save_draft_passes_raw_text_as_original_text(self):
         fake_state_store = FakeStateStore()
-        fake_query = FakeQuery()
-        fake_context = SimpleNamespace(user_data={bot.DRAFTS_KEY: {"entry-1": {}}})
+        fake_context = SimpleNamespace(bot=FakeEditBot(), user_data={bot.DRAFTS_KEY: {"entry-1": {}}})
         draft = {
             "id": "entry-1",
+            "chat_id": 123,
+            "preview_msg_id": 20,
             "title": "Title",
             "text": "Formatted text",
             "raw_text": "Raw model text",
@@ -1245,7 +1323,7 @@ class SaveDraftTests(unittest.IsolatedAsyncioTestCase):
             patch.object(bot, "save_entry", new=successful_save_entry),
             patch.object(bot, "state_store", fake_state_store),
         ):
-            await bot._save_draft(fake_query, fake_context, "entry-1", draft)
+            await bot._save_draft(fake_context, draft)
 
         self.assertEqual(calls[0][1], "Formatted text")
         self.assertEqual(calls[0][6], "Raw model text")
@@ -1271,8 +1349,7 @@ class SavedEntryTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_save_keeps_note_with_post_save_buttons(self):
         fake_state_store = FakeStateStore()
-        fake_query = FakeQuery()
-        fake_context = SimpleNamespace(user_data={bot.DRAFTS_KEY: {}})
+        fake_context = SimpleNamespace(bot=FakeEditBot(), user_data={bot.DRAFTS_KEY: {}})
         draft = self._draft()
 
         with (
@@ -1280,13 +1357,13 @@ class SavedEntryTests(unittest.IsolatedAsyncioTestCase):
             patch.object(bot, "state_store", fake_state_store),
             patch.object(bot.roast, "is_configured", return_value=True),
         ):
-            await bot._save_draft(fake_query, fake_context, "entry-1", draft)
+            await bot._save_draft(fake_context, draft)
 
         self.assertEqual(draft["page_id"], "ab-cd")
         self.assertEqual(fake_state_store.saved_drafts[-1]["page_id"], "ab-cd")
         self.assertEqual(fake_state_store.marked_saved, ["123:10"])
         self.assertEqual(fake_state_store.removed_drafts, [])
-        final = fake_query.edits[-1]
+        final = fake_context.bot.edits[-1]
         self.assertEqual(final["text"], bot._preview_text("Title", "Text", ["work"], draft["entry_date"]))
         buttons = [button for row in final["reply_markup"].inline_keyboard for button in row]
         callbacks = [button.callback_data for button in buttons if button.callback_data]
@@ -1402,44 +1479,190 @@ class SavedEntryTests(unittest.IsolatedAsyncioTestCase):
 
         archive.assert_not_awaited()
 
-    async def test_reply_edit_rejected_for_saved_note(self):
-        user_msg = SimpleNamespace(reply_text=AsyncMock())
-        update = SimpleNamespace(effective_message=user_msg, effective_chat=SimpleNamespace(id=123))
+    def _reply_update(self):
+        user_msg = SimpleNamespace(reply_text=AsyncMock(), message_id=60)
+        return SimpleNamespace(effective_message=user_msg, effective_chat=SimpleNamespace(id=123)), user_msg
+
+    def _reply_context(self, draft):
+        return SimpleNamespace(
+            bot=FakeEditBot(),
+            user_data={bot.DRAFTS_KEY: {draft["id"]: draft}},
+        )
+
+    async def test_retry_save_callback_edits_preview_via_bot(self):
+        fake_state_store = FakeStateStore()
+        update = self._callback_update("save:entry-1")
+        fake_context = SimpleNamespace(bot=FakeEditBot(), user_data={bot.DRAFTS_KEY: {"entry-1": self._draft()}})
+
+        with (
+            patch.object(bot, "save_entry", new=AsyncMock(return_value=SAVED)),
+            patch.object(bot, "state_store", fake_state_store),
+        ):
+            await bot.entry_callback(update, fake_context)
+
+        self.assertEqual(update.callback_query.edits, [])
+        self.assertEqual(fake_context.bot.edits[0]["text"], "Saving to Notion...")
+        self.assertEqual(fake_context.bot.edits[-1]["message_id"], 20)
+        self.assertEqual(fake_context.user_data[bot.DRAFTS_KEY]["entry-1"]["page_id"], "page-1")
+
+    async def test_reply_edit_on_saved_note_patches_notion(self):
+        update, user_msg = self._reply_update()
+        draft = self._draft(page_id="page-1", raw_text="Raw")
+        fake_context = self._reply_context(draft)
+        fake_state_store = FakeStateStore()
+        update_content = AsyncMock()
+
+        with (
+            patch.object(bot, "state_store", fake_state_store),
+            patch.object(bot, "edit_entry_draft", AsyncMock(return_value=("New", "New text", ["new"]))),
+            patch.object(bot, "update_entry_content", update_content),
+        ):
+            applied = await bot._apply_draft_reply_edit(update, fake_context, draft, "shorter")
+
+        self.assertTrue(applied)
+        update_content.assert_awaited_once_with("page-1", "New", "New text", ["new"])
+        self.assertEqual((draft["title"], draft["text"], draft["tags"]), ("New", "New text", ["new"]))
+        self.assertEqual(draft["raw_text"], "Raw")
+        self.assertFalse(draft["saving"])
+        self.assertEqual(fake_state_store.saved_drafts[-1]["title"], "New")
+        callbacks = [b.callback_data for row in fake_context.bot.edits[-1]["reply_markup"].inline_keyboard for b in row]
+        self.assertIn("delete:entry-1", callbacks)
+
+    async def test_reply_edit_notion_failure_keeps_old_fields(self):
+        update, user_msg = self._reply_update()
         draft = self._draft(page_id="page-1")
-        edit = AsyncMock()
+        fake_context = self._reply_context(draft)
+        fake_state_store = FakeStateStore()
 
-        with patch.object(bot, "state_store", FakeStateStore()), patch.object(bot, "edit_entry_draft", edit):
-            applied = await bot._apply_draft_reply_edit(update, SimpleNamespace(), draft, "shorter")
-
-        self.assertFalse(applied)
-        edit.assert_not_awaited()
-        user_msg.reply_text.assert_awaited_once_with("This note is already saved to Notion.")
-
-    async def test_reply_edit_dropped_when_saved_during_model_call(self):
-        user_msg = SimpleNamespace(reply_text=AsyncMock())
-        update = SimpleNamespace(effective_message=user_msg, effective_chat=SimpleNamespace(id=123))
-        draft = self._draft()
-
-        async def edit_and_save(**kwargs):
-            draft["page_id"] = "page-1"
-            return "New", "New text", ["new"]
-
-        fake_context = SimpleNamespace(bot=SimpleNamespace(send_chat_action=AsyncMock()))
-        with patch.object(bot, "state_store", FakeStateStore()), patch.object(bot, "edit_entry_draft", side_effect=edit_and_save):
+        with (
+            patch.object(bot, "state_store", fake_state_store),
+            patch.object(bot, "edit_entry_draft", AsyncMock(return_value=("New", "New text", ["new"]))),
+            patch.object(bot, "update_entry_content", AsyncMock(side_effect=RuntimeError("boom"))),
+            patch.object(bot.logger, "exception"),
+        ):
             applied = await bot._apply_draft_reply_edit(update, fake_context, draft, "shorter")
 
         self.assertFalse(applied)
+        self.assertEqual((draft["title"], draft["text"], draft["tags"]), ("Title", "Text", ["work"]))
+        self.assertFalse(draft["saving"])
+        self.assertEqual(fake_state_store.saved_drafts, [])
+        user_msg.reply_text.assert_awaited_once_with("Notion not updated: boom")
+
+    async def test_reply_edit_without_changes_skips_notion_and_preview(self):
+        update, user_msg = self._reply_update()
+        draft = self._draft(page_id="page-1")
+        fake_context = self._reply_context(draft)
+        update_content = AsyncMock()
+
+        with (
+            patch.object(bot, "state_store", FakeStateStore()),
+            patch.object(bot, "edit_entry_draft", AsyncMock(return_value=("Title", "Text", ["work"]))),
+            patch.object(bot, "update_entry_content", update_content),
+        ):
+            applied = await bot._apply_draft_reply_edit(update, fake_context, draft, "same")
+
+        self.assertTrue(applied)
+        update_content.assert_not_awaited()
+        self.assertEqual(fake_context.bot.edits, [])
+        self.assertIn(60, draft["thread_msg_ids"])
+
+    def test_reply_to_stored_draft_caches_a_copy(self):
+        stored = self._draft(page_id="page-1")
+        fake_store = SimpleNamespace(
+            data={"drafts": {"entry-1": stored}},
+            get_draft=lambda entry_id: dict(stored),
+        )
+        fake_context = SimpleNamespace(user_data={})
+        with patch.object(bot, "state_store", fake_store):
+            found = bot._find_draft_by_reply(fake_context, 123, 20)
+
+        self.assertEqual(found, stored)
+        self.assertIsNot(found, stored)
+        self.assertIs(fake_context.user_data[bot.DRAFTS_KEY]["entry-1"], found)
+
+    async def test_reply_edit_rejected_while_saving(self):
+        update, user_msg = self._reply_update()
+        draft = self._draft(saving=True)
+        edit = AsyncMock()
+
+        with patch.object(bot, "state_store", FakeStateStore()), patch.object(bot, "edit_entry_draft", edit):
+            applied = await bot._apply_draft_reply_edit(update, self._reply_context(draft), draft, "shorter")
+
+        self.assertFalse(applied)
+        edit.assert_not_awaited()
+        user_msg.reply_text.assert_awaited_once_with("This draft is already saving.")
+
+    async def test_reply_edit_dropped_when_save_starts_during_model_call(self):
+        update, user_msg = self._reply_update()
+        draft = self._draft()
+
+        async def edit_and_save(**kwargs):
+            draft["saving"] = True
+            return "New", "New text", ["new"]
+
+        with patch.object(bot, "state_store", FakeStateStore()), patch.object(bot, "edit_entry_draft", side_effect=edit_and_save):
+            applied = await bot._apply_draft_reply_edit(update, self._reply_context(draft), draft, "shorter")
+
+        self.assertFalse(applied)
         self.assertEqual(draft["text"], "Text")
+
+    async def test_reply_edit_dropped_when_note_deleted_during_model_call(self):
+        update, user_msg = self._reply_update()
+        draft = self._draft(page_id="page-1")
+        fake_context = self._reply_context(draft)
+        update_content = AsyncMock()
+
+        async def edit_and_delete(**kwargs):
+            fake_context.user_data[bot.DRAFTS_KEY].pop("entry-1")
+            return "New", "New text", ["new"]
+
+        with (
+            patch.object(bot, "state_store", FakeStateStore()),
+            patch.object(bot, "edit_entry_draft", side_effect=edit_and_delete),
+            patch.object(bot, "update_entry_content", update_content),
+        ):
+            applied = await bot._apply_draft_reply_edit(update, fake_context, draft, "shorter")
+
+        self.assertFalse(applied)
+        update_content.assert_not_awaited()
+        user_msg.reply_text.assert_awaited_once_with("This draft is no longer available.")
+
+    async def test_voice_reply_on_saved_note_patches_notion(self):
+        draft = self._draft(page_id="page-1")
+        fake_bot = FakeRoastBot()
+        user_msg = SimpleNamespace(
+            voice=SimpleNamespace(file_id="voice-file-id"),
+            reply_to_message=SimpleNamespace(message_id=20),
+            message_id=61,
+            chat_id=123,
+            get_bot=lambda: fake_bot,
+            reply_text=AsyncMock(return_value=SimpleNamespace(message_id=99)),
+        )
+        update = SimpleNamespace(effective_message=user_msg, effective_chat=SimpleNamespace(id=123))
+        fake_context = SimpleNamespace(bot=fake_bot, user_data={bot.DRAFTS_KEY: {"entry-1": draft}})
+        update_content = AsyncMock()
+
+        with (
+            patch.object(bot, "state_store", FakeStateStore()),
+            patch.object(bot, "_transcribe_voice_file", new=AsyncMock(return_value="add tag sport")),
+            patch.object(bot, "edit_entry_draft", AsyncMock(return_value=("Title", "Text", ["work", "sport"]))),
+            patch.object(bot, "update_entry_content", update_content),
+        ):
+            await bot.handle_voice(update, fake_context)
+
+        update_content.assert_awaited_once_with("page-1", "Title", "Text", ["work", "sport"])
+        self.assertEqual(draft["tags"], ["work", "sport"])
 
     def test_saved_date_picker_hides_cancel_draft(self):
         keyboard = bot._date_picker_keyboard("entry-1", saved=True)
         callbacks = [button.callback_data for row in keyboard.inline_keyboard for button in row]
         self.assertNotIn("cancel:entry-1", callbacks)
 
-    def test_reply_to_saved_note_is_not_a_draft_edit(self):
-        fake_context = SimpleNamespace(user_data={bot.DRAFTS_KEY: {"entry-1": self._draft(page_id="page-1")}})
+    def test_reply_to_saved_note_finds_its_draft(self):
+        draft = self._draft(page_id="page-1")
+        fake_context = SimpleNamespace(user_data={bot.DRAFTS_KEY: {"entry-1": draft}})
         with patch.object(bot, "state_store", SimpleNamespace(data={"drafts": {}})):
-            self.assertIsNone(bot._find_draft_by_reply(fake_context, 123, 20))
+            self.assertIs(bot._find_draft_by_reply(fake_context, 123, 20), draft)
 
 
 class StatCommandTests(unittest.IsolatedAsyncioTestCase):
@@ -1785,7 +2008,11 @@ class MultimodelRoastTests(unittest.IsolatedAsyncioTestCase):
 class FakeSendBot:
     def __init__(self):
         self.sent_messages = []
+        self.edits = []
         self.username = "diary_bot"
+
+    async def edit_message_text(self, **kwargs):
+        self.edits.append(kwargs)
 
     async def send_message(self, **kwargs):
         self.sent_messages.append(kwargs)
@@ -1956,6 +2183,9 @@ class FakeStateStore:
     def save_draft(self, draft):
         self.saved_drafts.append(dict(draft))
 
+    def get_draft(self, entry_id):
+        return None
+
     def mark_message_processing(self, key):
         self.marked_processing.append(key)
         self.messages[key]["status"] = "processing"
@@ -2107,6 +2337,9 @@ class RoastKeyboardTests(unittest.TestCase):
         callback_data = [b.callback_data for row in keyboard.inline_keyboard for b in row]
 
         self.assertNotIn("roast:entry-1", callback_data)
+
+
+SAVED = SimpleNamespace(created=True, page_id="page-1")
 
 
 def _items(*texts):
