@@ -49,7 +49,7 @@ from services.i18n import (
     normalize_language,
     t,
 )
-from services.notion import archive_page, page_url, save_entry, update_entry_date
+from services.notion import archive_page, page_url, save_entry, update_entry_content, update_entry_date
 from services.state_store import (
     CHRONOLOGY_SECTION,
     MODE_CHAT,
@@ -72,7 +72,6 @@ logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 DRAFTS_KEY = "drafts"
 SAVED_ENTRIES_LIMIT = 50
-EDIT_PROMPTS_KEY = "edit_prompts"
 MEMORY_PROMPTS_KEY = "memory_prompts"
 MEMORY_REQUESTS_KEY = "memory_requests"
 MAX_CONCURRENT_UPDATES = 1024
@@ -437,10 +436,6 @@ def _drafts(context: ContextTypes.DEFAULT_TYPE) -> dict:
     return context.user_data.setdefault(DRAFTS_KEY, {})
 
 
-def _edit_prompts(context: ContextTypes.DEFAULT_TYPE) -> dict:
-    return context.user_data.setdefault(EDIT_PROMPTS_KEY, {})
-
-
 def _memory_prompts(context: ContextTypes.DEFAULT_TYPE) -> dict:
     return context.user_data.setdefault(MEMORY_PROMPTS_KEY, {})
 
@@ -590,7 +585,7 @@ def _get_draft(context: ContextTypes.DEFAULT_TYPE, entry_id: str) -> dict[str, A
 
 def _find_draft_by_reply(context: ContextTypes.DEFAULT_TYPE, chat_id: int, reply_to_message_id: int) -> dict[str, Any] | None:
     for entry_id, draft in list(_drafts(context).items()):
-        if draft.get("chat_id") == chat_id and not draft.get("page_id"):
+        if draft.get("chat_id") == chat_id:
             if (
                 _preview_msg_id(draft) == reply_to_message_id
                 or draft.get("metadata", {}).get("telegram_message_id") == reply_to_message_id
@@ -599,14 +594,13 @@ def _find_draft_by_reply(context: ContextTypes.DEFAULT_TYPE, chat_id: int, reply
                 return draft
     stored_drafts = getattr(state_store, "data", {}).get("drafts", {})
     for entry_id, draft in list(stored_drafts.items()):
-        if draft.get("chat_id") == chat_id and not draft.get("page_id"):
+        if draft.get("chat_id") == chat_id:
             if (
                 _preview_msg_id(draft) == reply_to_message_id
                 or draft.get("metadata", {}).get("telegram_message_id") == reply_to_message_id
                 or reply_to_message_id in draft.get("thread_msg_ids", [])
             ):
-                _drafts(context)[entry_id] = draft
-                return draft
+                return _get_draft(context, entry_id)
     return None
 
 
@@ -639,7 +633,7 @@ def _preview_keyboard(
         rows.append([InlineKeyboardButton(t("button.open_notion", language), url=page_url(page_id))])
         rows.append([InlineKeyboardButton(t("button.delete", language), callback_data=f"delete:{entry_id}")])
     else:
-        rows.append([InlineKeyboardButton(t("button.save", language), callback_data=f"save:{entry_id}")])
+        rows.append([InlineKeyboardButton(t("button.retry_save", language), callback_data=f"save:{entry_id}")])
         rows.append([InlineKeyboardButton(t("button.cancel", language), callback_data=f"cancel:{entry_id}")])
     return InlineKeyboardMarkup(rows)
 
@@ -2216,33 +2210,7 @@ async def _create_preview(
             title, formatted_text, tags = await format_entry(source_text)
     text = formatted_text or source_text
 
-    preview = _render_preview(title, text, tags, entry_date, language=lang)
-    keyboard = _preview_keyboard(
-        entry_id,
-        entry_date=entry_date,
-        show_pagination=preview.truncated,
-        preview_page=preview.page,
-        page_count=preview.page_count,
-        language=lang,
-    )
-    if preview_message:
-        preview_msg = preview_message
-        await _edit_reply_message(
-            context,
-            preview_msg,
-            preview.text,
-            parse_mode="HTML",
-            reply_markup=keyboard,
-        )
-    else:
-        preview_msg = await _reply_to_source(
-            message,
-            preview.text,
-            parse_mode="HTML",
-            reply_markup=keyboard,
-        )
-
-    _drafts(context)[entry_id] = {
+    draft = {
         "id": entry_id,
         "title": title,
         "text": text,
@@ -2252,17 +2220,25 @@ async def _create_preview(
         "metadata": _entry_metadata(record, source_text, bot_username=_bot_username(context)),
         "allow_duplicate": bool(record and record.get("allow_duplicate")),
         "chat_id": message.chat_id,
-        "preview_msg_id": preview_msg.message_id,
-        "preview_page": preview.page,
+        "preview_page": 0,
         "saving": False,
         "message_key": message_key,
         "language": lang,
     }
-    state_store.save_draft(_drafts(context)[entry_id])
+    preview_msg = preview_message or await _reply_to_source(message, t("preparing", lang))
+
+    draft["preview_msg_id"] = preview_msg.message_id
+    _drafts(context)[entry_id] = draft
+    state_store.save_draft(draft)
     if message_key:
         state_store.mark_message_drafted(message_key, entry_id)
     if source_text and source_text.strip():
         context.application.create_task(_update_memory_and_chronology(source_text, preview_msg, language=lang))
+    # Draft is persisted; a save or Telegram error must not mark the message failed and trigger replay.
+    try:
+        await _save_draft(context, draft)
+    except Exception:
+        logger.exception("Error autosaving diary note")
 
 
 def _callback_payload(update: Update) -> tuple[str, str] | tuple[None, None]:
@@ -2303,11 +2279,11 @@ async def entry_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
 
     if action == "save":
-        await _save_draft(query, context, entry_id, draft)
+        await _save_draft(context, draft)
     elif action == "save_anyway":
         draft["allow_duplicate"] = True
         state_store.save_draft(draft)
-        await _save_draft(query, context, entry_id, draft)
+        await _save_draft(context, draft)
     elif action == "roast":
         await _roast_draft(query, context, draft)
     elif action == "cancel":
@@ -2423,7 +2399,7 @@ def _draft_metadata_for_save(draft: dict, context: ContextTypes.DEFAULT_TYPE) ->
     return None
 
 
-async def _save_draft(query, context: ContextTypes.DEFAULT_TYPE, entry_id: str, draft: dict) -> None:
+async def _save_draft(context: ContextTypes.DEFAULT_TYPE, draft: dict) -> None:
     if draft.get("saving"):
         return
 
@@ -2432,7 +2408,8 @@ async def _save_draft(query, context: ContextTypes.DEFAULT_TYPE, entry_id: str, 
     draft["entry_date"] = _normalize_entry_date(draft.get("entry_date"))
     metadata = _draft_metadata_for_save(draft, context)
     try:
-        await query.edit_message_text(t("saving", language))
+        # Retry stays reachable if the bot dies mid-save.
+        await _edit_draft_message(context, draft, t("saving", language), reply_markup=_preview_keyboard_for_draft(draft))
         result = await save_entry(
             draft["title"],
             draft["text"],
@@ -2446,7 +2423,9 @@ async def _save_draft(query, context: ContextTypes.DEFAULT_TYPE, entry_id: str, 
         logger.exception("Error saving to Notion")
         draft["saving"] = False
         state_store.save_draft(draft)
-        await query.edit_message_text(
+        await _edit_draft_message(
+            context,
+            draft,
             t("not_saved", language, error=e),
             reply_markup=_preview_keyboard_for_draft(draft),
         )
@@ -2455,9 +2434,11 @@ async def _save_draft(query, context: ContextTypes.DEFAULT_TYPE, entry_id: str, 
     draft["saving"] = False
     if not result.created:
         state_store.save_draft(draft)
-        await query.edit_message_text(
+        await _edit_draft_message(
+            context,
+            draft,
             _duplicate_warning_text(draft.get("metadata"), language),
-            reply_markup=_duplicate_save_keyboard(entry_id, language),
+            reply_markup=_duplicate_save_keyboard(draft["id"], language),
         )
         return
 
@@ -2467,12 +2448,7 @@ async def _save_draft(query, context: ContextTypes.DEFAULT_TYPE, entry_id: str, 
     state_store.save_draft(draft)
     for pruned_id in state_store.prune_saved_drafts(SAVED_ENTRIES_LIMIT):
         _drafts(context).pop(pruned_id, None)
-    preview = _render_preview_for_draft(draft)
-    await query.edit_message_text(
-        preview.text,
-        parse_mode="HTML",
-        reply_markup=_preview_keyboard_for_draft(draft, preview),
-    )
+    await _edit_preview(context, draft)
 
 
 async def _delete_saved_entry(query, context: ContextTypes.DEFAULT_TYPE, entry_id: str, draft: dict) -> None:
@@ -2500,6 +2476,15 @@ async def _cancel_draft(query, context: ContextTypes.DEFAULT_TYPE, entry_id: str
     await query.edit_message_text(t("cancelled", language))
 
 
+async def _edit_draft_message(context: ContextTypes.DEFAULT_TYPE, draft: dict, text: str, **kwargs):
+    return await context.bot.edit_message_text(
+        chat_id=draft["chat_id"],
+        message_id=_preview_msg_id(draft),
+        text=text,
+        **kwargs,
+    )
+
+
 async def _edit_preview(context: ContextTypes.DEFAULT_TYPE, draft: dict) -> None:
     previous_entry_date = draft.get("entry_date")
     previous_preview_page = draft.get("preview_page")
@@ -2508,10 +2493,10 @@ async def _edit_preview(context: ContextTypes.DEFAULT_TYPE, draft: dict) -> None
     draft["preview_page"] = preview.page
     if previous_entry_date != draft["entry_date"] or previous_preview_page != preview.page:
         state_store.save_draft(draft)
-    await context.bot.edit_message_text(
-        chat_id=draft["chat_id"],
-        message_id=_preview_msg_id(draft),
-        text=preview.text,
+    await _edit_draft_message(
+        context,
+        draft,
+        preview.text,
         parse_mode="HTML",
         reply_markup=_preview_keyboard_for_draft(draft, preview),
     )
@@ -2562,9 +2547,6 @@ async def _set_entry_date(update: Update, context: ContextTypes.DEFAULT_TYPE, dr
 
 
 async def _reject_locked_draft_edit(user_msg, draft: dict, language: str | None) -> bool:
-    if draft.get("page_id"):
-        await user_msg.reply_text(t("entry.already_saved", language))
-        return True
     if draft.get("saving"):
         await user_msg.reply_text(t("draft.saving", language))
         return True
@@ -2609,18 +2591,40 @@ async def _apply_draft_reply_edit(
             await user_msg.reply_text(t("error", language, error=e))
         return False
 
-    # Save may have started or finished while the model was editing.
+    # Save, delete, or another edit may have run while the model was editing.
     if await _reject_locked_draft_edit(user_msg, draft, language):
         return False
+    if _get_draft(context, draft["id"]) is None:
+        await user_msg.reply_text(t("draft.gone", language))
+        return False
 
-    draft["title"] = new_title
-    draft["text"] = new_text
-    draft["tags"] = new_tags
-    draft["preview_page"] = 0
+    changed = (new_title, new_text, new_tags) != (draft.get("title"), draft.get("text"), draft.get("tags"))
+    if changed and draft.get("page_id"):
+        draft["saving"] = True
+        try:
+            await update_entry_content(draft["page_id"], new_title, new_text, new_tags)
+        except Exception as e:
+            logger.exception("Error updating Notion entry content")
+            error_text = t("entry.update_failed", language, error=e)
+            if status_message is not None:
+                await _edit_reply_message(context, status_message, error_text, reply_markup=failure_markup)
+            else:
+                await user_msg.reply_text(error_text)
+            return False
+        finally:
+            draft["saving"] = False
+
+    if changed:
+        draft["title"] = new_title
+        draft["text"] = new_text
+        draft["tags"] = new_tags
+        draft["preview_page"] = 0
     if getattr(user_msg, "message_id", None):
         draft.setdefault("thread_msg_ids", []).append(user_msg.message_id)
     state_store.save_draft(draft)
-    await _edit_preview(context, draft)
+    # Telegram rejects an edit that changes nothing.
+    if changed:
+        await _edit_preview(context, draft)
     return True
 
 
@@ -2667,42 +2671,18 @@ async def receive_edit_reply(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     chat_id = update.effective_chat.id
     prompt_id = reply_to.message_id
-    prompt = _edit_prompts(context).pop(_prompt_key(chat_id, prompt_id), None)
-    if not prompt:
-        if _memory_prompts(context).pop(_prompt_key(chat_id, prompt_id), None):
-            await _receive_memory_focus(update, context, user_msg.text or "")
-            return
-        roast_chain = _roast_chains.get(_roast_chain_key(chat_id, prompt_id))
-        if roast_chain is not None:
-            await _handle_roast_followup(update, context, roast_chain)
-            return
-        draft = _find_draft_by_reply(context, chat_id, prompt_id)
-        if draft:
-            await _apply_draft_reply_edit(update, context, draft, user_msg.text or "")
-            return
-        await handle_text(update, context)
+    if _memory_prompts(context).pop(_prompt_key(chat_id, prompt_id), None):
+        await _receive_memory_focus(update, context, user_msg.text or "")
         return
-
-    draft = _get_draft(context, prompt["entry_id"])
-    if not draft:
-        await user_msg.reply_text(t("draft.gone", _message_language(user_msg, update)))
+    roast_chain = _roast_chains.get(_roast_chain_key(chat_id, prompt_id))
+    if roast_chain is not None:
+        await _handle_roast_followup(update, context, roast_chain)
         return
-
-    field = prompt["field"]
-    if field == "title":
-        draft["title"] = user_msg.text.strip()
-    elif field == "text":
-        draft["text"] = user_msg.text.strip()
-    elif field == "tags":
-        draft["tags"] = [t.strip() for t in user_msg.text.split(",") if t.strip()]
-    draft["preview_page"] = 0
-
-    state_store.save_draft(draft)
-    await _edit_preview(context, draft)
-    with suppress(Exception):
-        await context.bot.delete_message(chat_id, prompt_id)
-    with suppress(Exception):
-        await context.bot.delete_message(chat_id, user_msg.message_id)
+    draft = _find_draft_by_reply(context, chat_id, prompt_id)
+    if draft:
+        await _apply_draft_reply_edit(update, context, draft, user_msg.text or "")
+        return
+    await handle_text(update, context)
 
 
 # --- Retrospective long-term memory rebuild -------------------------------

@@ -17,10 +17,10 @@ You'll need a Telegram bot token, an OpenAI API key, and a Notion integration + 
 
 ## What you can do
 
-- **Send a voice or text note** — it's transcribed, titled, tagged, previewed, and saved as a Notion row.
+- **Send a voice or text note** — it's transcribed, titled, tagged, and saved as a Notion row automatically.
 - **Retry failed voice requests** — use the Retry button on failed diary, Chat, Roast follow-up, draft edit, and `/memory` focus voice messages.
-- **Edit before saving** — adjust title, text, tags, or date; nothing is written until you press Save.
-- **Act after saving** — the saved note keeps its buttons: 🔥 Roast, move to another date, open in Notion, or delete from Notion.
+- **Edit by reply** — reply to the note to change title, text, or tags; the Notion row's title, tags, and body are rewritten (manual Notion body and tag edits are overwritten, `Original Text` stays raw).
+- **Note buttons** — 🔥 Roast, move to another date, open in Notion, or delete from Notion. Retry save and Cancel appear only when saving fails.
 - **🔥 Roast, your personal coach** — an honest take on your entry; reply to it to keep talking and go deeper. Tell it to behave differently and it remembers.
 - **Learns you on its own** — builds a private knowledge base about you from every note, no extra input needed, and posts one short note when it learns something or you change a rule.
 - **Summaries** — automatic daily recap and an on-demand weekly report.

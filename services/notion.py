@@ -1,5 +1,6 @@
 import asyncio
 import re
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import date, timedelta
 import httpx
@@ -11,6 +12,7 @@ NOTION_TIMEOUT = 30
 NOTION_RETRY_ATTEMPTS = 3
 NOTION_RETRY_DELAY = 1
 NOTION_TEXT_CHUNK_SIZE = 2000
+NOTION_CHILDREN_BATCH_SIZE = 100
 TITLE_PROPERTY_CANDIDATES = ("Name", "Title", "title")
 CREATED_PROPERTY = "Created"
 TAGS_PROPERTY = "Tags"
@@ -473,21 +475,50 @@ async def get_diary_pages(
             cursor = data.get("next_cursor")
 
 
+async def _list_children(http: httpx.AsyncClient, block_id: str) -> list[dict]:
+    blocks = []
+    cursor = None
+    while True:
+        url = f"{API}/blocks/{block_id}/children?page_size=100"
+        if cursor:
+            url = f"{url}&start_cursor={cursor}"
+        resp = await _request_with_retry(http, "get", url)
+        data = resp.json()
+        blocks.extend(data.get("results", []))
+        if not data.get("has_more"):
+            return blocks
+        cursor = data.get("next_cursor")
+
+
+async def _list_child_ids(http: httpx.AsyncClient, block_id: str) -> list[str]:
+    return [block["id"] for block in await _list_children(http, block_id)]
+
+
+async def _append_children(http: httpx.AsyncClient, block_id: str, blocks: list[dict]) -> None:
+    for start in range(0, len(blocks), NOTION_CHILDREN_BATCH_SIZE):
+        await _request_with_retry(
+            http,
+            "patch",
+            f"{API}/blocks/{block_id}/children",
+            json={"children": blocks[start:start + NOTION_CHILDREN_BATCH_SIZE]},
+        )
+
+
+def _entry_blocks(entry_title: str, entry_text: str) -> list[dict]:
+    return [
+        {
+            "object": "block",
+            "type": "heading_3",
+            "heading_3": {"rich_text": _rich_text(entry_title)},
+        },
+        *_paragraph_blocks(entry_text),
+    ]
+
+
 async def get_page_text(page_id: str) -> str:
     """Fetches all text blocks from a Notion page and returns them as plain text."""
-    blocks = []
     async with httpx.AsyncClient(timeout=NOTION_TIMEOUT) as http:
-        cursor = None
-        while True:
-            url = f"{API}/blocks/{page_id}/children?page_size=100"
-            if cursor:
-                url = f"{url}&start_cursor={cursor}"
-            resp = await _request_with_retry(http, "get", url)
-            data = resp.json()
-            blocks.extend(data.get("results", []))
-            if not data.get("has_more"):
-                break
-            cursor = data.get("next_cursor")
+        blocks = await _list_children(http, page_id)
     lines = []
     for block in blocks:
         block_type = block.get("type")
@@ -538,6 +569,7 @@ async def create_page(
         }
         if original_text is not None:
             properties[schema.original_text] = _rich_text_property(original_text)
+        blocks = _entry_blocks(entry_title, entry_text)
         resp = await _request_with_retry(
             http,
             "post",
@@ -545,21 +577,21 @@ async def create_page(
             json={
                 "parent": {"database_id": settings.notion_database_id},
                 "properties": properties,
-                "children": [
-                    {
-                        "object": "block",
-                        "type": "heading_3",
-                        "heading_3": {"rich_text": _rich_text(entry_title)},
-                    },
-                    *_paragraph_blocks(entry_text),
-                ],
+                "children": blocks[:NOTION_CHILDREN_BATCH_SIZE],
             },
         )
         page = resp.json()
         page_id = page.get("id")
         if not page_id:
             raise RuntimeError("Notion create page response did not include page id")
-        await _verify_page_created(http, page_id)
+        try:
+            await _append_children(http, page_id, blocks[NOTION_CHILDREN_BATCH_SIZE:])
+            await _verify_page_created(http, page_id)
+        except Exception:
+            # No half-written row left behind for retry to duplicate.
+            with suppress(Exception):
+                await _request_with_retry(http, "patch", f"{API}/pages/{page_id}", json={"archived": True})
+            raise
         return SaveResult(page_id=page_id, created=True)
 
 
@@ -575,6 +607,26 @@ async def update_entry_date(page_id: str, entry_date: str) -> None:
             json={"properties": {
                 schema.created: {"date": {"start": notion_entry_date}},
                 schema.day: {"select": {"name": notion_entry_date}},
+            }},
+        )
+
+
+async def update_entry_content(page_id: str, entry_title: str, entry_text: str, entry_tags: list[str]) -> None:
+    """Replaces a saved row's title, tags, and body. Original Text stays untouched."""
+    async with httpx.AsyncClient(timeout=NOTION_TIMEOUT) as http:
+        schema = await ensure_database_schema(http)
+        old_ids = await _list_child_ids(http, page_id)
+        # Append before delete: a failed append leaves the old body intact.
+        await _append_children(http, page_id, _entry_blocks(entry_title, entry_text))
+        for block_id in old_ids:
+            await _request_with_retry(http, "delete", f"{API}/blocks/{block_id}")
+        await _request_with_retry(
+            http,
+            "patch",
+            f"{API}/pages/{page_id}",
+            json={"properties": {
+                schema.title: {"title": _rich_text(entry_title)},
+                schema.tags: {"multi_select": _combine_tags(None, entry_tags, schema.tags)},
             }},
         )
 

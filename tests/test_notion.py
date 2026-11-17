@@ -280,6 +280,79 @@ class NotionSchemaTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(http.patch_calls, [{"url": f"{notion.API}/pages/page-1", "json": {"archived": True}}])
 
+    async def test_create_page_appends_children_beyond_first_hundred_before_verify(self):
+        http = FakeEntryContentHttp()
+        text = "\n\n".join(f"p{index}" for index in range(150))
+        with patch.object(notion.httpx, "AsyncClient", lambda timeout: http):
+            result = await notion.create_page("Title", text, ["work"])
+
+        self.assertEqual(result, notion.SaveResult(page_id="page-1", created=True))
+        create_payload = http.post_calls[-1]["json"]
+        self.assertEqual(len(create_payload["children"]), 100)
+        self.assertEqual(create_payload["children"][0]["type"], "heading_3")
+        append = http.patch_calls[-1]
+        self.assertEqual(append["url"], f"{notion.API}/blocks/page-1/children")
+        self.assertEqual(len(append["json"]["children"]), 51)
+        self.assertEqual(http.events[-2:], ["append page-1", "verify page-1"])
+
+    async def test_create_page_archives_page_when_append_fails(self):
+        http = FakeEntryContentHttp(fail_append=True)
+        text = "\n\n".join(f"p{index}" for index in range(150))
+        with (
+            patch.object(notion.httpx, "AsyncClient", lambda timeout: http),
+            patch.object(notion.asyncio, "sleep", new=_no_sleep),
+        ):
+            with self.assertRaises(RuntimeError):
+                await notion.create_page("Title", text, ["work"])
+
+        self.assertEqual(http.patch_calls[-1], {"url": f"{notion.API}/pages/page-1", "json": {"archived": True}})
+        self.assertNotIn("verify page-1", http.events)
+
+    async def test_append_children_batches_by_hundred(self):
+        http = FakeEntryContentHttp()
+        blocks = [{"type": "paragraph", "index": index} for index in range(250)]
+
+        await notion._append_children(http, "page-1", blocks)
+
+        self.assertEqual([len(call["json"]["children"]) for call in http.patch_calls], [100, 100, 50])
+        self.assertEqual(http.patch_calls[2]["json"]["children"][-1]["index"], 249)
+
+    async def test_update_entry_content_replaces_body_title_and_tags(self):
+        http = FakeEntryContentHttp(child_pages=[["old-1", "old-2"], ["old-3"]])
+        with patch.object(notion.httpx, "AsyncClient", lambda timeout: http):
+            await notion.update_entry_content("page-1", "New title", "First\n\nSecond", ["work", "Daily"])
+
+        self.assertIn(f"{notion.API}/blocks/page-1/children?page_size=100&start_cursor=cursor-2", http.get_calls)
+        append = http.patch_calls[0]
+        self.assertEqual(append["url"], f"{notion.API}/blocks/page-1/children")
+        self.assertEqual(
+            [block["type"] for block in append["json"]["children"]],
+            ["heading_3", "paragraph", "paragraph"],
+        )
+        self.assertEqual(
+            append["json"]["children"][0]["heading_3"]["rich_text"],
+            [{"text": {"content": "New title"}}],
+        )
+        self.assertEqual(
+            http.events,
+            ["append page-1", "delete old-1", "delete old-2", "delete old-3", "properties page-1"],
+        )
+        properties = http.patch_calls[-1]["json"]["properties"]
+        self.assertEqual(properties["Name"], {"title": [{"text": {"content": "New title"}}]})
+        self.assertEqual(properties["Tags"], {"multi_select": [{"name": "Daily"}, {"name": "work"}]})
+        self.assertNotIn("Original Text", properties)
+
+    async def test_update_entry_content_keeps_old_body_when_append_fails(self):
+        http = FakeEntryContentHttp(child_pages=[["old-1"]], fail_append=True)
+        with (
+            patch.object(notion.httpx, "AsyncClient", lambda timeout: http),
+            patch.object(notion.asyncio, "sleep", new=_no_sleep),
+        ):
+            with self.assertRaises(RuntimeError):
+                await notion.update_entry_content("page-1", "Title", "Text", [])
+
+        self.assertEqual(http.delete_calls, [])
+
     async def test_create_page_splits_long_entry_text_into_notion_sized_paragraphs(self):
         http = FakeCreatePageHttp()
         long_text = "x" * (notion.NOTION_TEXT_CHUNK_SIZE + 199)
@@ -545,6 +618,48 @@ class FakeCreatePageHttp:
 
     async def patch(self, url, headers, json):
         self.patch_calls.append({"url": url, "json": json})
+        return FakeResponse({})
+
+
+async def _no_sleep(delay):
+    return None
+
+
+class FakeEntryContentHttp(FakeCreatePageHttp):
+    def __init__(self, child_pages=None, fail_append=False):
+        super().__init__()
+        self.child_pages = child_pages or [[]]
+        self.fail_append = fail_append
+        self.get_calls = []
+        self.delete_calls = []
+        self.events = []
+
+    async def get(self, url, headers):
+        self.get_calls.append(url)
+        if "/children" in url:
+            index = 1 if "start_cursor=" in url else 0
+            has_more = index + 1 < len(self.child_pages)
+            return FakeResponse({
+                "results": [{"id": block_id} for block_id in self.child_pages[index]],
+                "has_more": has_more,
+                "next_cursor": "cursor-2" if has_more else None,
+            })
+        if "/pages/" in url:
+            self.events.append(f"verify {url.rsplit('/', 1)[-1]}")
+        return await super().get(url, headers)
+
+    async def patch(self, url, headers, json):
+        if url.endswith("/children"):
+            if self.fail_append:
+                return FakeResponse({}, is_success=False, status_code=400, text="bad")
+            self.events.append(f"append {url.split('/')[-2]}")
+        elif "/pages/" in url:
+            self.events.append(f"properties {url.rsplit('/', 1)[-1]}")
+        return await super().patch(url, headers, json)
+
+    async def delete(self, url, headers):
+        self.delete_calls.append(url)
+        self.events.append(f"delete {url.rsplit('/', 1)[-1]}")
         return FakeResponse({})
 
 
